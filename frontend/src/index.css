@@ -147,7 +147,7 @@ button { font: inherit; cursor: pointer; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.content { flex: 1; padding: 28px 32px; max-width: 1240px; min-width: 0; }
+.content { flex: 1; padding: 28px 32px; max-width: 1240px; min-width: 0; margin: 0 auto; width: 100%; }
 .mobile-tabs { display: none; }
 
 /* --- Cards / panels --- */
@@ -289,7 +289,8 @@ h2 { margin: 0 0 18px; font-size: 21px; font-weight: 700; letter-spacing: -0.015
 .auth-links { display: flex; justify-content: space-between; margin-top: 16px; font-size: 14px; }
 
 /* --- Tables --- */
-.table { width: 100%; border-collapse: collapse; background: var(--panel); }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table { width: 100%; min-width: 700px; border-collapse: collapse; background: var(--panel); }
 .table th, .table td { border-bottom: 1px solid var(--line); padding: 10px 12px; text-align: left; font-size: 14px; }
 .table th {
   background: #f7f9fc;
@@ -408,6 +409,11 @@ h2 { margin: 0 0 18px; font-size: 21px; font-weight: 700; letter-spacing: -0.015
 }
 
 /* --- Responsive --- */
+@media (max-width: 1200px) {
+  .content { padding: 22px 20px; }
+  .table th, .table td { padding: 9px 10px; font-size: 13.5px; }
+}
+
 @media (max-width: 820px) {
   .shell { flex-direction: column; }
   .sidebar { display: none; }
@@ -415,13 +421,16 @@ h2 { margin: 0 0 18px; font-size: 21px; font-weight: 700; letter-spacing: -0.015
     display: flex;
     gap: 4px;
     overflow-x: auto;
+    scrollbar-width: none;
     padding: 10px 10px;
     background: linear-gradient(180deg, var(--side-bg), var(--side-bg-2));
     position: sticky;
     top: 0;
     z-index: 10;
   }
+  .mobile-tabs::-webkit-scrollbar { display: none; }
   .mobile-tabs a {
+    flex: none;
     padding: 8px 12px;
     border-radius: 999px;
     text-decoration: none;
@@ -433,8 +442,9 @@ h2 { margin: 0 0 18px; font-size: 21px; font-weight: 700; letter-spacing: -0.015
   .mobile-tabs a.active { background: linear-gradient(135deg, #4c6ef5, var(--brand-600)); color: #fff; }
   .content { padding: 14px; }
   .panel { padding: 16px; }
+  .table-scroll { overflow-x: visible; }
   .table thead { display: none; }
-  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; min-width: 0; }
   .table tr {
     border: 1px solid var(--line);
     border-radius: var(--radius);
@@ -446,4 +456,8 @@ h2 { margin: 0 0 18px; font-size: 21px; font-weight: 700; letter-spacing: -0.015
   .table td { border: none; padding: 4px 8px; }
   .table tbody tr:last-child td { border-bottom: none; }
   .table td::before { content: attr(data-label) ': '; color: var(--muted); font-size: 12px; }
+}
+
+@media (max-width: 420px) {
+  .mobile-tabs a { padding: 7px 10px; font-size: 13px; }
 }

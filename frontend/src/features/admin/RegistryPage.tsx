@@ -134,6 +134,7 @@ export default function RegistryPage() {
       ) : !data || data.items.length === 0 ? (
         <EmptyState text={STR.empty} />
       ) : (
+        <div className="table-scroll">
         <table className="table">
           <thead>
             <tr>
@@ -184,6 +185,7 @@ export default function RegistryPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       {pending && (

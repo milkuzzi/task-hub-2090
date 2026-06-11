@@ -33,6 +33,7 @@ export default function TasksTable({ items, role, sort, onToggle, onRowClick }: 
   const showReadiness = role === 'author';
 
   return (
+    <div className="table-scroll">
     <table className="table">
       <thead>
         <tr>
@@ -103,5 +104,6 @@ export default function TasksTable({ items, role, sort, onToggle, onRowClick }: 
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
