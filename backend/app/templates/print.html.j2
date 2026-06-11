@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Школа № 2090 · Поручения · {{ role_label }}</title>
+<style>
+  :root { font-family: "Segoe UI", Arial, sans-serif; color: #111; }
+  body { margin: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .meta { color: #555; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; vertical-align: top;
+           word-break: break-word; }
+  th { background: #eee; }
+  .num { white-space: nowrap; }
+  .badge { display: inline-block; padding: 1px 5px; border: 1px solid #b00; color: #b00;
+           border-radius: 3px; font-size: 11px; }
+  .muted { color: #777; }
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { margin: 0; }
+    table { font-size: 11px; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    .noprint { display: none; }
+  }
+</style>
+</head>
+<body>
+  <h1>Школа № 2090 · Поручения · {{ role_label }}</h1>
+  <div class="meta">Сформировано {{ generated_at }} · всего записей: {{ rows|length }}</div>
+  <button class="noprint" onclick="window.print()">Печать</button>
+  <table>
+    <thead>
+      <tr>
+        <th class="num">№</th>
+        <th class="num">ID</th>
+        <th>Название</th>
+        <th>Описание</th>
+        <th class="num">Срок</th>
+        <th>Исполнитель</th>
+        <th>Постановщик</th>
+        <th>Наблюдатели</th>
+        <th>Статус</th>
+        <th>Просрочка</th>
+        <th>Отчёт о выполнении</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="num">{{ r.seq_no }}</td>
+        <td class="num">{{ r.code }}</td>
+        <td>{{ r.title }}</td>
+        <td>{{ r.description or "" }}</td>
+        <td class="num">{{ r.due_display }}</td>
+        <td>{{ r.assignee }}</td>
+        <td>{{ r.author }}</td>
+        <td>{{ r.observers or "—" }}</td>
+        <td>{{ r.status_label }}</td>
+        <td>{% if r.is_overdue %}<span class="badge">Просрочена</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ r.report_text or "" }}{% if r.ready %} <span class="muted">(готовность отмечена)</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% if not rows %}
+      <tr><td colspan="11" class="muted">Нет задач для отображения.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</body>
+</html>

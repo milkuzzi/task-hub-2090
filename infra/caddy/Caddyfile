@@ -1,0 +1,22 @@
+# Единый веб-контейнер: TLS (авто-HTTPS) + раздача SPA + проксирование /api на backend.
+# Заменяет связку «nginx фронта + отдельный Caddy» (минус один контейнер).
+#
+# SITE_ADDRESS задаётся в .env:
+#   - доменное имя (school2090.example.org) → Caddy сам выпустит и продлит TLS-сертификат;
+#   - ":80" → только HTTP (локальный демо-режим или работа за внешним прокси школы).
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# API → backend (тот же origin, без CORS)
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# SPA: статика + fallback на index.html для клиентского роутинга
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

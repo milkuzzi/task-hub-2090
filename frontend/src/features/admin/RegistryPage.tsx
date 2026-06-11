@@ -1,0 +1,204 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/shared/api/client';
+import { errorMessage } from '@/shared/api/http';
+import { STR } from '@/shared/strings';
+import { ConfirmDialog } from '@/shared/ui/Modal';
+import { Spinner, EmptyState } from '@/shared/ui/Spinner';
+
+type PendingAction =
+  | { type: 'removeRegistry'; id: string }
+  | { type: 'deleteUser'; userId: string };
+
+export default function RegistryPage() {
+  const qc = useQueryClient();
+
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [maxContact, setMaxContact] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['registry'],
+    queryFn: () => api.listRegistry(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.createRegistry({
+        email,
+        fullName: fullName.trim() ? fullName.trim() : null,
+        maxContact: maxContact.trim() ? maxContact.trim() : null,
+        isAdmin,
+      }),
+    onSuccess: () => {
+      setEmail('');
+      setFullName('');
+      setMaxContact('');
+      setIsAdmin(false);
+      setFormError(null);
+      qc.invalidateQueries({ queryKey: ['registry'] });
+    },
+    onError: (err) => {
+      setFormError(errorMessage(err));
+    },
+  });
+
+  const removeRegistryMutation = useMutation({
+    mutationFn: (id: string) => api.deleteRegistry(id),
+    onSuccess: () => {
+      setPending(null);
+      qc.invalidateQueries({ queryKey: ['registry'] });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: string) => api.deleteUser(userId),
+    onSuccess: () => {
+      setPending(null);
+      qc.invalidateQueries({ queryKey: ['registry'] });
+    },
+  });
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    createMutation.mutate();
+  };
+
+  const handleConfirm = () => {
+    if (!pending) return;
+    if (pending.type === 'removeRegistry') {
+      removeRegistryMutation.mutate(pending.id);
+    } else {
+      deleteUserMutation.mutate(pending.userId);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h2>{STR.admin}</h2>
+
+      <form onSubmit={handleAdd}>
+        <div className="field">
+          <label htmlFor="reg-email">E-mail</label>
+          <input
+            id="reg-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reg-fullname">Имя</label>
+          <input
+            id="reg-fullname"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reg-max">MAX</label>
+          <input
+            id="reg-max"
+            value={maxContact}
+            onChange={(e) => setMaxContact(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              checked={isAdmin}
+              onChange={(e) => setIsAdmin(e.target.checked)}
+            />{' '}
+            Админ
+          </label>
+        </div>
+        {formError && <div className="form-error">{formError}</div>}
+        <div className="row">
+          <button
+            type="submit"
+            className="btn primary"
+            disabled={createMutation.isPending}
+          >
+            Добавить
+          </button>
+        </div>
+      </form>
+
+      {isLoading ? (
+        <Spinner />
+      ) : !data || data.items.length === 0 ? (
+        <EmptyState text={STR.empty} />
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>E-mail</th>
+              <th>Имя</th>
+              <th>MAX</th>
+              <th>Админ</th>
+              <th>Зарегистрирован</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map((item) => (
+              <tr key={item.id}>
+                <td>{item.email}</td>
+                <td>{item.fullName ?? ''}</td>
+                <td>{item.maxContact ?? ''}</td>
+                <td>{item.isAdmin ? 'да' : ''}</td>
+                <td>{item.registered ? 'да' : 'нет'}</td>
+                <td>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() =>
+                        setPending({ type: 'removeRegistry', id: item.id })
+                      }
+                    >
+                      Убрать из реестра
+                    </button>
+                    {item.userId && (
+                      <button
+                        type="button"
+                        className="btn danger"
+                        onClick={() =>
+                          setPending({
+                            type: 'deleteUser',
+                            userId: item.userId as string,
+                          })
+                        }
+                      >
+                        Удалить пользователя и архив
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {pending && (
+        <ConfirmDialog
+          message={
+            pending.type === 'removeRegistry'
+              ? 'Убрать e-mail из реестра? Вход будет заблокирован.'
+              : 'Удалить пользователя и весь его архив? Действие необратимо.'
+          }
+          confirmLabel={STR.confirm}
+          danger={pending.type === 'deleteUser'}
+          onConfirm={handleConfirm}
+          onCancel={() => setPending(null)}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,103 @@
+# Система постановки поручений и контроля за их исполнением — школа № 2090.
+# Поднимает весь стек одной командой: docker compose up -d
+#
+# Контейнеры (4): db (PostgreSQL), backend (FastAPI), worker (планировщик,
+# тот же образ), web (Caddy: TLS + раздача SPA + проксирование /api на backend).
+#
+# Режим «3 контейнера»: SCHEDULER_IN_PROCESS=true в .env, и запускать без worker:
+#   docker compose up -d db backend web
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"     # ротация логов — чтобы диск VPS не забивался
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-taskhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskhub}
+      POSTGRES_DB: ${POSTGRES_DB:-taskhub}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskhub} -d ${POSTGRES_DB:-taskhub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  backend:
+    build: ./backend
+    image: taskhub-backend
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    command: ["api"]
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - attachments:${ATTACHMENTS_DIR:-/data/attachments}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/api/v1/health'); sys.exit(0)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [internal]
+
+  worker:
+    build: ./backend
+    image: taskhub-backend
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.5
+    command: ["worker"]
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    volumes:
+      - attachments:${ATTACHMENTS_DIR:-/data/attachments}
+    networks: [internal]
+
+  web:
+    build: ./frontend
+    image: taskhub-web
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    networks: [internal, external]
+
+volumes:
+  pgdata:
+  attachments:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+  external:
