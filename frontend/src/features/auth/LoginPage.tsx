@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AuthBrand } from '@/shared/ui/AuthBrand';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api/client';
 import { errorMessage } from '@/shared/api/http';
@@ -36,6 +37,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-wrap">
+      <AuthBrand />
       <div className="panel auth-card">
         <h1>{STR.login}</h1>
         <form onSubmit={handleSubmit}>

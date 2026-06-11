@@ -26,10 +26,23 @@ export function AppShell() {
     navigate('/login', { replace: true });
   };
 
+  const initials = (user?.displayName ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+
   return (
     <div className="shell">
       <nav className="sidebar">
-        <h1>{STR.appTitle}</h1>
+        <div className="brand">
+          <div className="brand-logo">2090</div>
+          <div className="brand-name">
+            <b>Поручения</b>
+            <span>школа № 2090</span>
+          </div>
+        </div>
         {TABS.map((t) => (
           <NavLink key={t.to} to={t.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             {t.label}
@@ -41,8 +54,9 @@ export function AppShell() {
           </NavLink>
         )}
         <div className="spacer" />
-        <div className="muted" style={{ fontSize: 13, padding: '0 12px' }}>
-          {user?.displayName}
+        <div className="side-user" title={user?.displayName}>
+          <div className="side-avatar">{initials || '•'}</div>
+          <div className="side-user-name">{user?.displayName}</div>
         </div>
         <button className="navlink" onClick={logout}>
           {STR.logout}

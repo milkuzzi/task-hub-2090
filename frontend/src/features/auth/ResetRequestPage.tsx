@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AuthBrand } from '@/shared/ui/AuthBrand';
 import { Link } from 'react-router-dom';
 import { api } from '@/shared/api/client';
 import { errorMessage } from '@/shared/api/http';
@@ -26,6 +27,7 @@ export default function ResetRequestPage() {
 
   return (
     <div className="auth-wrap">
+      <AuthBrand />
       <div className="panel auth-card">
         <h1>{STR.forgotPassword}</h1>
         {submitted ? (
