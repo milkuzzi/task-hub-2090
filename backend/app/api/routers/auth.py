@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
+from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models import User
 from app.schemas.auth import (
@@ -47,14 +48,22 @@ def _user_out(user: User) -> UserOut:
     )
 
 
-@router.post("/register", response_model=TokenOut)
+@router.post(
+    "/register",
+    response_model=TokenOut,
+    dependencies=[Depends(rate_limit("register", times=5, seconds=60))],
+)
 async def register(body: RegisterIn, response: Response, db: AsyncSession = Depends(get_db)):
     user, access, raw = await auth_service.register(db, email=body.email, password=body.password)
     _set_refresh_cookie(response, raw)
     return TokenOut(access_token=access, user=_user_out(user))
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post(
+    "/login",
+    response_model=TokenOut,
+    dependencies=[Depends(rate_limit("login", times=10, seconds=60))],
+)
 async def login(body: LoginIn, response: Response, db: AsyncSession = Depends(get_db)):
     user, access, raw = await auth_service.login(db, email=body.email, password=body.password)
     _set_refresh_cookie(response, raw)
@@ -77,13 +86,22 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
     return OkResponse()
 
 
-@router.post("/password-reset/request", response_model=OkResponse)
+@router.post(
+    "/password-reset/request",
+    response_model=OkResponse,
+    # Жёстче остальных: каждая попытка — реальное письмо через SMTP.
+    dependencies=[Depends(rate_limit("reset_request", times=5, seconds=900))],
+)
 async def reset_request(body: ResetRequestIn, db: AsyncSession = Depends(get_db)):
     await auth_service.request_password_reset(db, email=body.email)
     return OkResponse()
 
 
-@router.post("/password-reset/confirm", response_model=OkResponse)
+@router.post(
+    "/password-reset/confirm",
+    response_model=OkResponse,
+    dependencies=[Depends(rate_limit("reset_confirm", times=10, seconds=60))],
+)
 async def reset_confirm(body: ResetConfirmIn, db: AsyncSession = Depends(get_db)):
     await auth_service.confirm_password_reset(db, token=body.token, new_password=body.new_password)
     return OkResponse()

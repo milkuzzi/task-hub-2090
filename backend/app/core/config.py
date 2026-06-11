@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_JWT_SECRET = "dev-insecure-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     # --- JWT / секреты ---
-    jwt_secret: str = Field(default="dev-insecure-secret-change-me")
+    jwt_secret: str = Field(default=_DEV_JWT_SECRET)
     jwt_algorithm: str = Field(default="HS256")
     jwt_access_ttl_min: int = Field(default=15)
     refresh_ttl_days: int = Field(default=14)
@@ -75,6 +77,9 @@ class Settings(BaseSettings):
     base_url: str = Field(default="http://localhost:8080")
     cors_origins: str = Field(default="http://localhost:8080,http://localhost:5173")
 
+    # --- Rate limit на auth-эндпоинты (вход, регистрация, сброс пароля) ---
+    auth_rate_limit_enabled: bool = Field(default=True)
+
     # --- Первичный администратор ---
     admin_email: str = Field(default="")
     admin_password: str = Field(default="")
@@ -107,6 +112,20 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.app_env.lower() == "prod"
+
+    @model_validator(mode="after")
+    def _no_insecure_defaults_in_prod(self) -> Settings:
+        """Fail-fast: в проде нельзя стартовать с дефолтным JWT_SECRET (§13.1.6).
+
+        Иначе любой, кто читал исходники, сможет подделывать access-токены.
+        """
+        if self.is_prod and self.jwt_secret == _DEV_JWT_SECRET:
+            raise ValueError(
+                "APP_ENV=prod, но JWT_SECRET не задан (остался небезопасный дефолт). "
+                "Задайте в .env длинную случайную строку, например: "
+                "python3 -c 'import secrets; print(secrets.token_urlsafe(48))'"
+            )
+        return self
 
 
 @lru_cache

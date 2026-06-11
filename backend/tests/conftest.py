@@ -17,6 +17,9 @@ os.environ.setdefault(
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("APP_ENV", "dev")
 os.environ.setdefault("BASE_URL", "http://test")
+# Rate limit глобально выключен, чтобы массовые логины в тестах не ловили 429;
+# точечно включается в tests/integration/test_ratelimit.py.
+os.environ.setdefault("AUTH_RATE_LIMIT_ENABLED", "false")
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
