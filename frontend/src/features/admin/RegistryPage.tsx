@@ -107,27 +107,22 @@ export default function RegistryPage() {
             onChange={(e) => setMaxContact(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={isAdmin}
-              onChange={(e) => setIsAdmin(e.target.checked)}
-            />{' '}
-            Админ
-          </label>
+        <div className="field checkbox">
+          <input
+            id="reg-admin"
+            type="checkbox"
+            checked={isAdmin}
+            onChange={(e) => setIsAdmin(e.target.checked)}
+          />
+          <span>Админ</span>
         </div>
         {formError && <div className="form-error">{formError}</div>}
-        <div className="row">
-          <button
-            type="submit"
-            className="btn primary"
-            disabled={createMutation.isPending}
-          >
-            Добавить
-          </button>
-        </div>
+        <button type="submit" className="btn primary" disabled={createMutation.isPending}>
+          Добавить
+        </button>
       </form>
+
+      <hr className="divider" />
 
       {isLoading ? (
         <Spinner />

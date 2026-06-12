@@ -105,7 +105,7 @@ export default function TaskCardPage() {
 
   return (
     <div className="panel">
-      <div className="row between">
+      <div className="between">
         <h2>
           Задача №{task.seqNo} · ID {task.code}
         </h2>
@@ -118,22 +118,22 @@ export default function TaskCardPage() {
 
       <div className="field">
         <label>{STR.fTitle}</label>
-        <div>{task.title}</div>
+        <div className="field-value">{task.title}</div>
       </div>
 
       <div className="field">
         <label>{STR.fDescription}</label>
-        <div>{task.description || '—'}</div>
+        <div className="field-value">{task.description || '—'}</div>
       </div>
 
       <div className="field">
         <label>{STR.fDeadline}</label>
-        <div>{formatDeadline(task.deadline, task.deadlineHasTime)}</div>
+        <div className="field-value">{formatDeadline(task.deadline, task.deadlineHasTime)}</div>
       </div>
 
       <div className="field">
         <label>{STR.fAssignee}</label>
-        <div>
+        <div className="field-value">
           {task.assignee.displayName}
           {task.assignee.isDeleted ? ' (удалён)' : ''}
         </div>
@@ -141,13 +141,13 @@ export default function TaskCardPage() {
 
       <div className="field">
         <label>{STR.fAuthor}</label>
-        <div>{task.author.displayName}</div>
+        <div className="field-value">{task.author.displayName}</div>
       </div>
 
       <div className="field">
         <label>{STR.fObservers}</label>
         {task.observers.length === 0 ? (
-          <div>—</div>
+          <div className="field-value">—</div>
         ) : (
           <div className="chip-list">
             {task.observers.map((o) => (
@@ -163,7 +163,7 @@ export default function TaskCardPage() {
       {task.attachments.length > 0 && (
         <div className="field">
           <label>Вложения</label>
-          <ul>
+          <ul className="attach-list">
             {task.attachments.map((a) => (
               <li key={a.id}>
                 <AttachmentLink taskId={task.id} att={a} />
@@ -176,10 +176,14 @@ export default function TaskCardPage() {
       {task.report && (
         <div className="field">
           <label>{STR.fReport}</label>
-          <div>{task.report.text || '—'}</div>
-          {task.report.ready && <ReadyBadge />}
+          <div className="field-value">{task.report.text || '—'}</div>
+          {task.report.ready && (
+            <div>
+              <ReadyBadge />
+            </div>
+          )}
           {task.report.attachments.length > 0 && (
-            <ul>
+            <ul className="attach-list">
               {task.report.attachments.map((a) => (
                 <li key={a.id}>
                   <AttachmentLink taskId={task.id} att={a} />
