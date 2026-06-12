@@ -10,13 +10,14 @@ import asyncio
 import logging
 
 from app.core.config import settings
-from app.scheduler import build_scheduler
+from app.scheduler import _touch_heartbeat, build_scheduler
 
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("worker")
 
 
 async def main() -> None:
+    _touch_heartbeat()  # стартовый heartbeat — до первого прогона sweep
     scheduler = build_scheduler()
     scheduler.start()
     log.info(

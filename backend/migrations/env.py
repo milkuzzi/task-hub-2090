@@ -9,14 +9,13 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
+# Импортируем модели, чтобы наполнить Base.metadata (для autogenerate при желании).
+import app.models  # noqa: F401,E402
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
 from app.db.base import Base
-
-# Импортируем модели, чтобы наполнить Base.metadata (для autogenerate при желании).
-import app.models  # noqa: F401,E402
 
 config = context.config
 

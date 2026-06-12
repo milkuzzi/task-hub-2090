@@ -9,6 +9,9 @@ in-process режима (§13.4.6).
 from __future__ import annotations
 
 import logging
+import os
+import time
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,8 +24,21 @@ from app.services import notification_service
 
 log = logging.getLogger("scheduler")
 
+# Heartbeat-файл: планировщик «отмечается» на каждом проходе sweep, а
+# docker healthcheck воркера проверяет свежесть файла. Так Docker узнаёт, что
+# планировщик действительно жив, а не просто процесс висит (§13.4.6).
+HEARTBEAT_FILE = Path(os.environ.get("SCHEDULER_HEARTBEAT_FILE", "/tmp/scheduler-heartbeat"))
+
+
+def _touch_heartbeat() -> None:
+    try:
+        HEARTBEAT_FILE.write_text(str(int(time.time())))
+    except OSError as exc:  # не валим прогон из-за heartbeat
+        log.warning("не удалось обновить heartbeat: %s", exc)
+
 
 async def _sweep_job() -> None:
+    _touch_heartbeat()
     async with SessionFactory() as db:
         changed = await notification_service.overdue_sweep(db)
         if changed:

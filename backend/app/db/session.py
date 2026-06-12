@@ -20,6 +20,11 @@ from app.core.config import settings
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
     pool_pre_ping=True,
+    # Явные лимиты пула под скромный VPS (db: max_connections=50). Backend и
+    # worker делят лимит, поэтому держим пул небольшим и с переработкой соединений.
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_recycle=1800,
     future=True,
 )
 

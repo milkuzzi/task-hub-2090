@@ -27,11 +27,25 @@ PG_DB="${POSTGRES_DB:-taskhub}"
 
 mkdir -p "$BACKUP_DIR"
 
+# Пишем во временные файлы и переименовываем только при успехе — чтобы
+# прерванный бэкап не оставил «битый» файл, который ротация сочтёт валидным.
+DB_TMP="$BACKUP_DIR/.db-$STAMP.sql.gz.part"
+ATTACH_TMP="$BACKUP_DIR/.attachments-$STAMP.tar.gz.part"
+cleanup() { rm -f "$DB_TMP" "$ATTACH_TMP"; }
+trap cleanup EXIT
+
 echo "[backup] Дамп БД…"
-docker compose exec -T db pg_dump -U "$PG_USER" "$PG_DB" | gzip > "$BACKUP_DIR/db-$STAMP.sql.gz"
+docker compose exec -T db pg_dump -U "$PG_USER" "$PG_DB" | gzip > "$DB_TMP"
+# Проверка целостности gzip — если дамп оборвался, не публикуем его.
+gzip -t "$DB_TMP"
+mv "$DB_TMP" "$BACKUP_DIR/db-$STAMP.sql.gz"
 
 echo "[backup] Архив вложений…"
-docker compose exec -T backend tar czf - -C "$ATTACH_DIR" . > "$BACKUP_DIR/attachments-$STAMP.tar.gz"
+docker compose exec -T backend tar czf - -C "$ATTACH_DIR" . > "$ATTACH_TMP"
+gzip -t "$ATTACH_TMP"
+mv "$ATTACH_TMP" "$BACKUP_DIR/attachments-$STAMP.tar.gz"
+
+trap - EXIT
 
 echo "[backup] Ротация (храним последние $KEEP)…"
 ls -1t "$BACKUP_DIR"/db-*.sql.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f

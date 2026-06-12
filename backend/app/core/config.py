@@ -32,6 +32,11 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://taskhub:taskhub@db:5432/taskhub",
     )
 
+    # Размер пула соединений на процесс. backend + worker делят db.max_connections,
+    # поэтому держим пул небольшим (5 + до 5 overflow = max 10 на процесс).
+    db_pool_size: int = Field(default=5)
+    db_max_overflow: int = Field(default=5)
+
     # --- JWT / секреты ---
     jwt_secret: str = Field(default=_DEV_JWT_SECRET)
     jwt_algorithm: str = Field(default="HS256")

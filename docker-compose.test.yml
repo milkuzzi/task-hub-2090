@@ -8,6 +8,7 @@ services:
   testdb:
     image: postgres:16
     environment:
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: test
       POSTGRES_DB: test
     ports:
