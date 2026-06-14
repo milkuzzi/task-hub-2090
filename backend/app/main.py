@@ -64,6 +64,16 @@ async def validation_handler(_: Request, exc: RequestValidationError) -> JSONRes
     return JSONResponse(status_code=err.status_code, content=err.to_body())
 
 
+@app.exception_handler(Exception)
+async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    # Любое непредвиденное исключение отдаём единым телом {error:{...}} (а не
+    # дефолтным FastAPI {"detail":...}) и логируем со стеком. Деталь наружу не
+    # утекает — клиент получает обобщённое «Внутренняя ошибка сервиса».
+    log.exception("Необработанное исключение при обработке запроса: %s", exc)
+    err = errors.internal_error()
+    return JSONResponse(status_code=err.status_code, content=err.to_body())
+
+
 # --- Security-заголовки (чистый ASGI-middleware, без BaseHTTPMiddleware) ---
 
 

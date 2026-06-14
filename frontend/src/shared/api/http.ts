@@ -70,7 +70,18 @@ export function errorCode(error: unknown): string | undefined {
 
 export function errorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const body = error.response?.data as ApiErrorBody | undefined;
+    // Нет ответа от сервера — это проблема связи, а не прикладная ошибка.
+    if (!error.response) {
+      return 'Нет связи с сервером. Проверьте подключение и повторите попытку.';
+    }
+    const body = error.response.data as ApiErrorBody | undefined;
+    // Ошибки валидации (422) несут конкретику по полям в details — показываем
+    // её, иначе верхнеуровневый текст всегда был бы общим «Проверьте поля…».
+    const details = body?.error?.details;
+    if (details && details.length > 0) {
+      const msgs = details.map((d) => d.message).filter(Boolean);
+      if (msgs.length > 0) return msgs.join('; ');
+    }
     if (body?.error?.message) return body.error.message;
   }
   return 'Произошла ошибка. Повторите попытку.';

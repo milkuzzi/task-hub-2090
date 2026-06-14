@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TaskRole } from '@/shared/types';
 import { api } from '@/shared/api/client';
+import { errorMessage } from '@/shared/api/http';
 import { STR } from '@/shared/strings';
 import { saveBlob } from '@/shared/lib/download';
 import { Spinner, EmptyState } from '@/shared/ui/Spinner';
@@ -17,6 +18,7 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
   const navigate = useNavigate();
   const { sort, toggle } = useTableSort();
   const [search, setSearch] = useState('');
+  const [printError, setPrintError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', role],
@@ -27,6 +29,7 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
   // axios (а не прямой ссылкой) и открываем готовый HTML из blob. Окно
   // открываем синхронно по клику, чтобы не сработал блокировщик всплывающих окон.
   const handlePrint = async () => {
+    setPrintError(null);
     const win = window.open('', '_blank');
     try {
       const blob = await api.exportTasks(role);
@@ -38,8 +41,9 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
         saveBlob(blob, `tasks-${role}.html`);
         URL.revokeObjectURL(url);
       }
-    } catch {
+    } catch (err) {
       win?.close();
+      setPrintError(errorMessage(err));
     }
   };
 
@@ -76,6 +80,7 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
           </button>
         </div>
       </div>
+      {printError && <div className="form-error">{printError}</div>}
       {isLoading ? (
         <Spinner />
       ) : (
