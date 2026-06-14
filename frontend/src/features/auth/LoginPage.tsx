@@ -69,7 +69,6 @@ export default function LoginPage() {
           </button>
         </form>
         <div className="auth-links">
-          <Link to="/register">{STR.register}</Link>
           <Link to="/reset">{STR.forgotPassword}</Link>
         </div>
       </div>

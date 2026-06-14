@@ -8,7 +8,8 @@ import { Spinner, EmptyState } from '@/shared/ui/Spinner';
 
 type PendingAction =
   | { type: 'removeRegistry'; id: string }
-  | { type: 'deleteUser'; userId: string };
+  | { type: 'deleteUser'; userId: string }
+  | { type: 'transferAdmin'; email: string };
 
 export default function RegistryPage() {
   const qc = useQueryClient();
@@ -16,9 +17,12 @@ export default function RegistryPage() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [maxContact, setMaxContact] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
+
+  const [transferEmail, setTransferEmail] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferMessage, setTransferMessage] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['registry'],
@@ -31,13 +35,11 @@ export default function RegistryPage() {
         email,
         fullName: fullName.trim() ? fullName.trim() : null,
         maxContact: maxContact.trim() ? maxContact.trim() : null,
-        isAdmin,
       }),
     onSuccess: () => {
       setEmail('');
       setFullName('');
       setMaxContact('');
-      setIsAdmin(false);
       setFormError(null);
       qc.invalidateQueries({ queryKey: ['registry'] });
     },
@@ -62,20 +64,58 @@ export default function RegistryPage() {
     },
   });
 
+  const transferMutation = useMutation({
+    mutationFn: (targetEmail: string) => api.transferAdmin(targetEmail),
+    onSuccess: (res) => {
+      setPending(null);
+      setTransferEmail('');
+      setTransferError(null);
+      if (res.completed) {
+        setTransferMessage(STR.transferDoneImmediate);
+      } else if (res.emailSent === false) {
+        setTransferMessage(STR.transferEmailNotSent);
+      } else {
+        setTransferMessage(STR.transferDoneDeferred);
+      }
+      qc.invalidateQueries({ queryKey: ['registry'] });
+    },
+    onError: (err) => {
+      setPending(null);
+      setTransferMessage(null);
+      setTransferError(errorMessage(err));
+    },
+  });
+
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     createMutation.mutate();
   };
 
+  const handleTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTransferError(null);
+    setTransferMessage(null);
+    setPending({ type: 'transferAdmin', email: transferEmail.trim() });
+  };
+
   const handleConfirm = () => {
     if (!pending) return;
     if (pending.type === 'removeRegistry') {
       removeRegistryMutation.mutate(pending.id);
-    } else {
+    } else if (pending.type === 'deleteUser') {
       deleteUserMutation.mutate(pending.userId);
+    } else {
+      transferMutation.mutate(pending.email);
     }
   };
+
+  const confirmMessage =
+    pending?.type === 'removeRegistry'
+      ? 'Убрать e-mail из реестра? Вход будет заблокирован.'
+      : pending?.type === 'deleteUser'
+        ? 'Удалить пользователя и весь его архив? Действие необратимо.'
+        : STR.transferAdminConfirm;
 
   return (
     <div className="panel">
@@ -108,15 +148,7 @@ export default function RegistryPage() {
             onChange={(e) => setMaxContact(e.target.value)}
           />
         </div>
-        <div className="field checkbox">
-          <input
-            id="reg-admin"
-            type="checkbox"
-            checked={isAdmin}
-            onChange={(e) => setIsAdmin(e.target.checked)}
-          />
-          <span>Админ</span>
-        </div>
+        <p className="muted">{STR.inviteHint}</p>
         {formError && <div className="form-error">{formError}</div>}
         <div className="form-actions">
           <button type="submit" className="btn primary" disabled={createMutation.isPending}>
@@ -184,13 +216,35 @@ export default function RegistryPage() {
         </div>
       )}
 
+      <hr className="divider" />
+
+      <section>
+        <h2>{STR.transferAdmin}</h2>
+        <p className="muted">{STR.transferAdminHint}</p>
+        <form onSubmit={handleTransfer}>
+          <div className="field">
+            <label htmlFor="transfer-email">{STR.transferAdminEmail}</label>
+            <input
+              id="transfer-email"
+              type="email"
+              value={transferEmail}
+              onChange={(e) => setTransferEmail(e.target.value)}
+              required
+            />
+          </div>
+          {transferError && <div className="form-error">{transferError}</div>}
+          {transferMessage && <div className="form-success">{transferMessage}</div>}
+          <div className="form-actions">
+            <button type="submit" className="btn primary" disabled={transferMutation.isPending}>
+              {STR.transferAdmin}
+            </button>
+          </div>
+        </form>
+      </section>
+
       {pending && (
         <ConfirmDialog
-          message={
-            pending.type === 'removeRegistry'
-              ? 'Убрать e-mail из реестра? Вход будет заблокирован.'
-              : 'Удалить пользователя и весь его архив? Действие необратимо.'
-          }
+          message={confirmMessage}
           confirmLabel={STR.confirm}
           danger={pending.type === 'deleteUser'}
           onConfirm={handleConfirm}

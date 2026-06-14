@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User
@@ -72,11 +72,31 @@ async def is_admin(db: AsyncSession, user_id: uuid.UUID) -> bool:
     return bool(row)
 
 
+async def count_admins(db: AsyncSession) -> int:
+    """Число живых администраторов — инвариант единственного админа (Требование 2)."""
+    res = await db.execute(
+        select(func.count())
+        .select_from(User)
+        .where(User.is_admin.is_(True), User.is_deleted.is_(False))
+    )
+    return int(res.scalar_one())
+
+
+async def get_admin(db: AsyncSession) -> User | None:
+    """Текущий (единственный) администратор, если есть."""
+    res = await db.execute(
+        select(User)
+        .where(User.is_admin.is_(True), User.is_deleted.is_(False))
+        .order_by(User.created_at.asc())
+    )
+    return res.scalars().first()
+
+
 async def create(
     db: AsyncSession,
     *,
     email: str,
-    password_hash: str,
+    password_hash: str | None,
     display_name: str,
     is_admin: bool = False,
 ) -> User:

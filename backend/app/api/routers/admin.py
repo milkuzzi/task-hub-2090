@@ -15,6 +15,8 @@ from app.schemas.admin import (
     RegistryItemOut,
     RegistryListResponse,
     RegistryUpdateIn,
+    TransferAdminIn,
+    TransferAdminOut,
     UserDeleteResult,
 )
 from app.schemas.common import OkResponse
@@ -59,11 +61,20 @@ async def update_registry(
 @router.delete("/registry/{entry_id}", response_model=OkResponse)
 async def delete_registry(
     entry_id: uuid.UUID,
-    _: CurrentUser = Depends(require_admin),
+    actor: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    await registry_service.delete_entry(db, entry_id)
+    await registry_service.delete_entry(db, entry_id, actor)
     return OkResponse()
+
+
+@router.post("/transfer-admin", response_model=TransferAdminOut)
+async def transfer_admin(
+    body: TransferAdminIn,
+    actor: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await registry_service.transfer_admin(db, actor, body.email)
 
 
 @router.delete("/users/{user_id}", response_model=UserDeleteResult)

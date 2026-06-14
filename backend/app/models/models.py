@@ -17,6 +17,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     func,
@@ -66,13 +67,39 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     email: Mapped[str] = mapped_column(CITEXT, nullable=False, unique=True)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL = учётная запись ещё не активирована (приглашён, пароль не задан) —
+    # вход невозможен до перехода по ссылке «задайте пароль» (§3, передача админа).
+    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
+
+
+class PendingAdminHandover(Base):
+    """Отложенная передача администрирования (Требование 2).
+
+    Связывает входящего (приглашённого) администратора с исходящим. Исходящий
+    НЕ удаляется и НЕ демотируется немедленно: понижение в обычные пользователи
+    происходит только после активации входящего (установки пароля) — иначе
+    неудачное письмо/брошенное приглашение оставило бы сервис без администратора.
+    """
+
+    __tablename__ = "pending_admin_handover"
+    __table_args__ = (
+        Index("uq_pending_handover_incoming", "incoming_user_id", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    incoming_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    outgoing_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = _created_at()
 
 
 class Project(Base):

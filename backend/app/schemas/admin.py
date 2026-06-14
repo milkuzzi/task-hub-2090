@@ -28,14 +28,22 @@ class RegistryCreateIn(CamelModel):
     email: EmailStr
     full_name: str | None = None
     max_contact: str | None = None
-    is_admin: bool = False
 
 
 class RegistryUpdateIn(CamelModel):
     email: EmailStr | None = None
     full_name: str | None = None
     max_contact: str | None = None
-    is_admin: bool | None = None
+
+
+class TransferAdminIn(CamelModel):
+    email: EmailStr
+
+
+class TransferAdminOut(CamelModel):
+    completed: bool
+    email: str
+    email_sent: bool | None = None
 
 
 class UserDeleteResult(CamelModel):

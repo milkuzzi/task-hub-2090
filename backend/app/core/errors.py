@@ -59,6 +59,30 @@ def forbidden_admin() -> AppError:
     return AppError(403, "FORBIDDEN_ADMIN", "Действие доступно только администратору.")
 
 
+def self_transfer() -> AppError:
+    return AppError(400, "SELF_TRANSFER", "Нельзя передать администрирование самому себе.")
+
+
+def not_sole_admin() -> AppError:
+    return AppError(
+        409,
+        "NOT_SOLE_ADMIN",
+        "Передача администрирования доступна только единственному администратору.",
+    )
+
+
+def self_deletion() -> AppError:
+    return AppError(403, "SELF_DELETION", "Нельзя удалить собственную учётную запись.")
+
+
+def admin_delete_forbidden() -> AppError:
+    return AppError(
+        403,
+        "ADMIN_DELETE_FORBIDDEN",
+        "Сначала передайте администрирование другому пользователю.",
+    )
+
+
 def email_not_in_registry() -> AppError:
     # Особый случай отказа в регистрации — дословная фраза из ТЗ.
     return AppError(403, "EMAIL_NOT_IN_REGISTRY", NO_ACCESS_MESSAGE)

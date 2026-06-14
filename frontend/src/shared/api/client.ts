@@ -1,12 +1,14 @@
 import { http } from './http';
 import type {
   CreateTaskInput,
+  RegistryInput,
   RegistryItem,
   RegistryListResponse,
   TaskDetail,
   TaskListResponse,
   TaskStatus,
   TokenResponse,
+  TransferAdminResult,
   UpdateTaskInput,
   User,
   UserRef,
@@ -14,8 +16,6 @@ import type {
 
 // --- Auth ---
 export const api = {
-  register: (email: string, password: string) =>
-    http.post<TokenResponse>('/auth/register', { email, password }).then((r) => r.data),
   login: (email: string, password: string) =>
     http.post<TokenResponse>('/auth/login', { email, password }).then((r) => r.data),
   logout: () => http.post('/auth/logout').then((r) => r.data),
@@ -79,11 +79,13 @@ export const api = {
     http
       .get<RegistryListResponse>('/admin/registry', { params: { query, page_size: 500 } })
       .then((r) => r.data),
-  createRegistry: (body: Partial<RegistryItem>) =>
+  createRegistry: (body: RegistryInput) =>
     http.post<RegistryItem>('/admin/registry', body).then((r) => r.data),
-  updateRegistry: (id: string, body: Partial<RegistryItem>) =>
+  updateRegistry: (id: string, body: RegistryInput) =>
     http.put<RegistryItem>(`/admin/registry/${id}`, body).then((r) => r.data),
   deleteRegistry: (id: string) => http.delete(`/admin/registry/${id}`).then((r) => r.data),
   deleteUser: (id: string) =>
     http.delete(`/admin/users/${id}`, { params: { confirm: true } }).then((r) => r.data),
+  transferAdmin: (email: string) =>
+    http.post<TransferAdminResult>('/admin/transfer-admin', { email }).then((r) => r.data),
 };

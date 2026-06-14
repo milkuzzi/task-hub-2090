@@ -83,6 +83,20 @@ export interface RegistryListResponse {
   total: number;
 }
 
+// Вход для создания/обновления записи реестра — без isAdmin: администратора
+// нельзя выдать через реестр (только консоль и передача администрирования).
+export interface RegistryInput {
+  email: string;
+  fullName?: string | null;
+  maxContact?: string | null;
+}
+
+export interface TransferAdminResult {
+  completed: boolean;
+  email: string;
+  emailSent?: boolean | null;
+}
+
 export interface TokenResponse {
   accessToken: string;
   tokenType: string;

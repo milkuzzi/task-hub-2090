@@ -3,7 +3,6 @@ import { AuthGuard } from './AuthGuard';
 import { AdminGuard } from './AdminGuard';
 import { RouteError } from './RouteError';
 import LoginPage from '@/features/auth/LoginPage';
-import RegisterPage from '@/features/auth/RegisterPage';
 import ResetRequestPage from '@/features/auth/ResetRequestPage';
 import ResetConfirmPage from '@/features/auth/ResetConfirmPage';
 import TasksTabPage from '@/features/tasks/TasksTabPage';
@@ -14,7 +13,6 @@ import RegistryPage from '@/features/admin/RegistryPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
-  { path: '/register', element: <RegisterPage />, errorElement: <RouteError /> },
   { path: '/reset', element: <ResetRequestPage />, errorElement: <RouteError /> },
   { path: '/reset/confirm', element: <ResetConfirmPage />, errorElement: <RouteError /> },
   {

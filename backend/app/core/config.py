@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # --- Первичный администратор ---
     admin_email: str = Field(default="")
     admin_password: str = Field(default="")
+    # Секрет для консольной команды создания первичного администратора
+    # (`python -m app.cli.create_admin`). Сверяется timing-safe с ADMIN_CREATION_TOKEN
+    # из окружения — без него команда отказывает в создании администратора.
+    admin_creation_token: str = Field(default="")
 
     # --- Сид ---
     run_seed: bool = Field(default=False)

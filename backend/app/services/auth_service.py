@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import errors
@@ -14,9 +16,11 @@ from app.core.security import (
     verify_password,
 )
 from app.models import User
-from app.notifications.channel import ChannelKind, Message, Recipient
+from app.notifications.channel import ChannelKind, DeliveryStatus, Message, Recipient
 from app.notifications.registry import get_channel
-from app.repositories import registry_repo, tokens_repo, users_repo
+from app.repositories import handover_repo, registry_repo, tokens_repo, users_repo
+
+log = logging.getLogger("auth")
 
 
 async def _issue_tokens(db: AsyncSession, user: User) -> tuple[str, str]:
@@ -26,29 +30,46 @@ async def _issue_tokens(db: AsyncSession, user: User) -> tuple[str, str]:
     return access, raw
 
 
-async def register(db: AsyncSession, *, email: str, password: str) -> tuple[User, str, str]:
-    if not await registry_repo.is_listed(db, email):
-        raise errors.email_not_in_registry()  # дословная фраза отказа (§3 п.3)
-    if await users_repo.get_by_email(db, email) is not None:
-        raise errors.email_already_registered()
+async def promote_or_create_admin(db: AsyncSession, email: str) -> tuple[User, bool]:
+    """Повысить живого пользователя до администратора либо создать нового.
+
+    Гарантирует запись в реестре с is_admin=true и учётную запись с is_admin=true
+    (password_hash=NULL для свежей — пароль задаётся позже по ссылке). Возвращает
+    (пользователь, has_password) — has_password=False означает, что нужна ссылка
+    «задайте пароль» для активации.
+    """
     entry = await registry_repo.get_by_email(db, email)
-    display_name = entry.full_name if entry and entry.full_name else email.split("@")[0]
-    is_admin = bool(entry and entry.is_admin)
+    if entry is None:
+        entry = await registry_repo.create(
+            db, email=email, full_name=None, max_user_id=None, is_admin=True
+        )
+    else:
+        entry.is_admin = True
+
+    user = await users_repo.get_active_by_email(db, email)
+    if user is not None:
+        user.is_admin = True
+        await db.flush()
+        return user, user.password_hash is not None
+
+    display_name = entry.full_name if entry.full_name else email.split("@")[0]
     user = await users_repo.create(
         db,
         email=email,
-        password_hash=hash_password(password),
+        password_hash=None,
         display_name=display_name,
-        is_admin=is_admin,
+        is_admin=True,
     )
-    access, raw = await _issue_tokens(db, user)
-    await db.commit()
-    return user, access, raw
+    return user, False
 
 
 async def login(db: AsyncSession, *, email: str, password: str) -> tuple[User, str, str]:
     user = await users_repo.get_active_by_email(db, email)
-    if user is None or not verify_password(password, user.password_hash):
+    # password_hash None → учётка не активирована (приглашение без пароля) → вход
+    # невозможен; verify_password на None не вызываем.
+    if user is None or user.password_hash is None or not verify_password(
+        password, user.password_hash
+    ):
         raise errors.unauthenticated()
     if not await registry_repo.is_listed(db, email):
         raise errors.registry_access_revoked()
@@ -106,6 +127,28 @@ async def _send_reset_email(email: str, raw_token: str) -> None:
         pass
 
 
+async def _send_invitation_email(email: str, raw_token: str) -> bool:
+    """Письмо-приглашение: доступ предоставлен, нужно задать пароль для активации.
+
+    Возвращает True, если канал подтвердил доставку (для отчёта emailSent).
+    """
+    link = f"{settings.base_url.rstrip('/')}/reset/confirm?token={raw_token}"
+    body = (
+        "Вам предоставлен доступ к сервису поручений школы № 2090.\n"
+        "Чтобы активировать учётную запись, задайте пароль по ссылке "
+        f"(действует ограниченное время):\n{link}\n\n"
+        "После установки пароля вы сможете войти, указав этот e-mail."
+    )
+    msg = Message(subject="Доступ к сервису поручений — школа № 2090", body_text=body)
+    try:
+        result = await get_channel(ChannelKind.EMAIL).send(
+            Recipient(user_id="", email=email), msg
+        )
+        return result.status == DeliveryStatus.DELIVERED
+    except Exception:  # noqa: BLE001 — письмо best-effort, доступ уже выдан
+        return False
+
+
 async def confirm_password_reset(db: AsyncSession, *, token: str, new_password: str) -> None:
     reset = await tokens_repo.get_valid_reset(db, hash_token(token))
     if reset is None:
@@ -116,4 +159,13 @@ async def confirm_password_reset(db: AsyncSession, *, token: str, new_password: 
     user.password_hash = hash_password(new_password)
     await tokens_repo.mark_reset_used(db, reset)
     await tokens_repo.revoke_all_refresh(db, user.id)  # вынуждаем перелогиниться
+
+    # Требование 2: установка пароля — сигнал активации. Если этот пользователь —
+    # входящая сторона передачи администрирования, понижаем исходящего админа
+    # АТОМАРНО вместе с активацией (всё-или-ничего в одной транзакции): при сбое
+    # токен не будет помечен использованным и ссылку можно открыть повторно, а
+    # система никогда не останется без администратора.
+    outgoing_id = await handover_repo.complete_for(db, user.id)
     await db.commit()
+    if outgoing_id is not None:
+        log.info("admin_handover_completed incoming=%s outgoing=%s", user.id, outgoing_id)

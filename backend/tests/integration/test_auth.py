@@ -1,38 +1,23 @@
-"""Интеграция: регистрация, вход, блокировка доступа, сброс пароля (§13.7.3 Ж/Е)."""
+"""Интеграция: вход, блокировка доступа, сброс пароля, приглашения (§13.7.3 Ж/Е).
+
+Публичная регистрация удалена — доступ выдаётся только администратором через
+реестр (приглашение по e-mail). Активация = установка пароля по ссылке.
+"""
 
 from __future__ import annotations
 
-from app.core.errors import NO_ACCESS_MESSAGE
-from app.models import EmailRegistry
-from app.repositories import registry_repo
+from app.repositories import registry_repo, users_repo
+from app.schemas.admin import RegistryCreateIn
+from app.services import registry_service
 from tests.factories import auth_header, make_user
 
 
-async def test_register_refusal_exact_phrase(client):
+async def test_register_endpoint_removed(client):
+    # Публичной регистрации больше нет — маршрут отсутствует.
     r = await client.post(
         "/api/v1/auth/register", json={"email": "stranger@nowhere.ru", "password": "password123"}
     )
-    assert r.status_code == 403
-    body = r.json()
-    assert body["error"]["code"] == "EMAIL_NOT_IN_REGISTRY"
-    # дословно, включая регистр и точку
-    assert body["error"]["message"] == NO_ACCESS_MESSAGE
-    assert body["error"]["message"] == "Извините, у вас нет доступа к сервису."
-
-
-async def test_register_success_when_listed(client, db):
-    db.add(EmailRegistry(email="teacher@school.ru"))
-    await db.flush()
-    r = await client.post(
-        "/api/v1/auth/register", json={"email": "teacher@school.ru", "password": "password123"}
-    )
-    assert r.status_code == 200
-    assert r.json()["user"]["email"].lower() == "teacher@school.ru"
-    # повторная регистрация → конфликт
-    r2 = await client.post(
-        "/api/v1/auth/register", json={"email": "teacher@school.ru", "password": "password123"}
-    )
-    assert r2.status_code == 409
+    assert r.status_code in (404, 405)
 
 
 async def test_login_and_me(client, db):
@@ -50,6 +35,36 @@ async def test_login_and_me(client, db):
         "/api/v1/auth/login", json={"email": "u@school.ru", "password": "wrong"}
     )
     assert bad.status_code == 401
+
+
+async def test_login_blocked_until_password_set(client, db, fake_channels):
+    """Приглашённый (НЕактивный, password_hash=NULL) не может войти, пока не задаст пароль."""
+    email_fake, _ = fake_channels
+    # Приглашаем пользователя через реестр → создаётся неактивная учётка + письмо.
+    await registry_service.create_entry(db, RegistryCreateIn(email="invited@school.ru"))
+
+    user = await users_repo.get_active_by_email(db, "invited@school.ru")
+    assert user is not None and user.password_hash is None
+
+    # Вход невозможен до установки пароля.
+    blocked = await client.post(
+        "/api/v1/auth/login", json={"email": "invited@school.ru", "password": "whatever1"}
+    )
+    assert blocked.status_code == 401
+
+    # Активация по ссылке из письма-приглашения.
+    body = email_fake.sent[-1]["body"]
+    token = body.split("token=")[1].split()[0].strip()
+    confirm = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "newPassword": "freshpass1"},
+    )
+    assert confirm.status_code == 200
+
+    ok = await client.post(
+        "/api/v1/auth/login", json={"email": "invited@school.ru", "password": "freshpass1"}
+    )
+    assert ok.status_code == 200
 
 
 async def test_removed_from_registry_blocks_access_and_login(client, db):

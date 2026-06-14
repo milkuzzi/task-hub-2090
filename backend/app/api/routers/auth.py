@@ -15,7 +15,6 @@ from app.db.session import get_db
 from app.models import User
 from app.schemas.auth import (
     LoginIn,
-    RegisterIn,
     ResetConfirmIn,
     ResetRequestIn,
     TokenOut,
@@ -46,17 +45,6 @@ def _user_out(user: User) -> UserOut:
     return UserOut(
         id=user.id, email=user.email, is_admin=user.is_admin, display_name=user.display_name
     )
-
-
-@router.post(
-    "/register",
-    response_model=TokenOut,
-    dependencies=[Depends(rate_limit("register", times=5, seconds=60))],
-)
-async def register(body: RegisterIn, response: Response, db: AsyncSession = Depends(get_db)):
-    user, access, raw = await auth_service.register(db, email=body.email, password=body.password)
-    _set_refresh_cookie(response, raw)
-    return TokenOut(access_token=access, user=_user_out(user))
 
 
 @router.post(

@@ -9,11 +9,6 @@ from pydantic import EmailStr, Field
 from app.schemas.common import CamelModel
 
 
-class RegisterIn(CamelModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-
-
 class LoginIn(CamelModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=200)
