@@ -57,6 +57,29 @@ async def _count_files(db: AsyncSession, model, task_id: uuid.UUID) -> int:
     return res.scalar_one()
 
 
+async def _total_file_bytes(db: AsyncSession, task_id: uuid.UUID) -> int:
+    """Суммарный размер всех файловых вложений задачи (вложения задачи + отчёта)."""
+    total = 0
+    for model in (TaskAttachment, ReportAttachment):
+        res = await db.execute(
+            select(func.coalesce(func.sum(model.size_bytes), 0)).where(
+                model.task_id == task_id, model.kind == AttachKind.FILE
+            )
+        )
+        total += int(res.scalar_one() or 0)
+    return total
+
+
+async def _ensure_total_within_limit(
+    db: AsyncSession, task_id: uuid.UUID, new_size: int
+) -> None:
+    """Отклоняем загрузку, если суммарный размер файлов задачи превысит лимит (§M3)."""
+    max_total = settings.max_task_total_mb * 1024 * 1024
+    existing = await _total_file_bytes(db, task_id)
+    if existing + new_size > max_total:
+        raise errors.task_total_size_limit()
+
+
 async def _ensure_report(db: AsyncSession, ctx: TaskContext) -> TaskReport:
     if ctx.task.report is None:
         report = TaskReport(task_id=ctx.task.id, updated_by=ctx.user.id)
@@ -73,6 +96,7 @@ async def add_task_file(db: AsyncSession, ctx: TaskContext, upload: UploadFile) 
     if await _count_files(db, TaskAttachment, ctx.task.id) >= settings.max_files_per_task:
         raise errors.attachments_limit()
     data = await _read_limited(upload)
+    await _ensure_total_within_limit(db, ctx.task.id, len(data))
     stored = get_storage().save(ctx.task.id, data)
     att = TaskAttachment(
         task_id=ctx.task.id,
@@ -105,6 +129,7 @@ async def add_report_file(db: AsyncSession, ctx: TaskContext, upload: UploadFile
     if await _count_files(db, ReportAttachment, ctx.task.id) >= settings.max_files_per_report:
         raise errors.attachments_limit()
     data = await _read_limited(upload)
+    await _ensure_total_within_limit(db, ctx.task.id, len(data))
     stored = get_storage().save(ctx.task.id, data)
     att = ReportAttachment(
         task_id=ctx.task.id,

@@ -75,7 +75,25 @@ _storage: StorageBackend | None = None
 
 
 def get_storage() -> StorageBackend:
+    """Возвращает backend хранилища согласно settings.storage_backend.
+
+    'file'/'local' → локальный том. 's3' пока не реализован: вместо тихого
+    отката на локальное хранилище явно падаем с понятной ошибкой конфигурации,
+    чтобы оператор не считал, что файлы уходят в объектное хранилище.
+    """
     global _storage
     if _storage is None:
-        _storage = LocalStorage()
+        backend = settings.storage_backend.strip().lower()
+        if backend in ("file", "local"):
+            _storage = LocalStorage()
+        elif backend == "s3":
+            raise RuntimeError(
+                "STORAGE_BACKEND=s3 не поддерживается в этой сборке. "
+                "Укажите STORAGE_BACKEND=file (локальный том)."
+            )
+        else:
+            raise RuntimeError(
+                f"Неизвестное значение STORAGE_BACKEND={settings.storage_backend!r}. "
+                "Допустимо: file | s3."
+            )
     return _storage

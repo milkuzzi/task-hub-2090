@@ -100,6 +100,12 @@ def attachments_limit() -> AppError:
     return AppError(409, "ATTACHMENTS_LIMIT", "Превышено допустимое число вложений.")
 
 
+def task_total_size_limit() -> AppError:
+    return AppError(
+        413, "TASK_TOTAL_SIZE_LIMIT", "Превышен суммарный размер вложений задачи."
+    )
+
+
 def unsupported_filename() -> AppError:
     return AppError(415, "UNSUPPORTED_FILENAME", "Недопустимое имя файла.")
 

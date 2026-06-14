@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     max_task_total_mb: int = Field(default=200)
     max_observers: int = Field(default=5)
 
+    # Предел суммарного/одиночного объёма вложений, инлайнящихся в одно письмо.
+    # Канал e-mail читает файлы в память, поэтому на воркере с 256 МБ большие
+    # вложения не инлайнятся, а заменяются ссылкой в теле (защита от OOM).
+    max_email_attachment_mb: int = Field(default=10)
+
     # --- Таймзона и расписание ---
     tz: str = Field(default="Europe/Moscow", alias="TZ")
     notify_time: str = Field(default="09:00")  # HH:MM в таймзоне организации

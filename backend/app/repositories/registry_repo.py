@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,15 +22,6 @@ async def get_by_email(db: AsyncSession, email: str) -> EmailRegistry | None:
 
 async def get_by_id(db: AsyncSession, entry_id: uuid.UUID) -> EmailRegistry | None:
     return await db.get(EmailRegistry, entry_id)
-
-
-async def all_emails_listed(db: AsyncSession, emails: Sequence[str]) -> bool:
-    if not emails:
-        return True
-    res = await db.execute(
-        select(func.count()).select_from(EmailRegistry).where(EmailRegistry.email.in_(list(emails)))
-    )
-    return res.scalar_one() == len(set(e.lower() for e in emails))
 
 
 async def list_entries(

@@ -34,6 +34,16 @@ async def get_active_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
     return res.scalar_one_or_none()
 
 
+async def get_active_by_emails(db: AsyncSession, emails: Sequence[str]) -> dict[str, User]:
+    """Активные пользователи по списку e-mail одним запросом (батч против N+1)."""
+    if not emails:
+        return {}
+    res = await db.execute(
+        select(User).where(User.email.in_(list(emails)), User.is_deleted.is_(False))
+    )
+    return {u.email: u for u in res.scalars().all()}
+
+
 async def get_active_by_ids(db: AsyncSession, ids: Sequence[uuid.UUID]) -> list[User]:
     if not ids:
         return []

@@ -31,10 +31,50 @@ class EmailChannel:
             msg["From"] = settings.smtp_from
             msg["To"] = r.email
             msg["Subject"] = m.subject
-            msg.set_content(m.body_text)
-            if m.body_html:
-                msg.add_alternative(m.body_html, subtype="html")
+
+            # Решаем, какие вложения инлайнить, ДО чтения файлов в память: канал
+            # читает файлы целиком, поэтому крупные/суммарно тяжёлые вложения не
+            # вкладываем (риск OOM на воркере 256 МБ), а заменяем ссылками в теле.
+            cap = settings.max_email_attachment_mb * 1024 * 1024
+            inline: list = []
+            skipped: list = []
+            running = 0
             for att in m.attachments:
+                try:
+                    size = Path(att.storage_path).stat().st_size
+                except OSError:
+                    size = att.size or 0
+                if size > cap or running + size > cap:
+                    skipped.append(att)
+                else:
+                    inline.append(att)
+                    running += size
+
+            body_text = m.body_text
+            body_html = m.body_html
+            if skipped:
+                links = "\n".join(
+                    f"• {att.filename}: {att.public_url}" for att in skipped
+                )
+                body_text += (
+                    "\n\nЧасть вложений слишком велика для письма и не приложена — "
+                    f"файлы доступны в приложении по ссылке:\n{links}"
+                )
+                if body_html:
+                    html_links = "".join(
+                        f"<li>{att.filename}: "
+                        f'<a href="{att.public_url}">{att.public_url}</a></li>'
+                        for att in skipped
+                    )
+                    body_html += (
+                        "<p>Часть вложений слишком велика для письма и не приложена — "
+                        f"файлы доступны в приложении по ссылке:</p><ul>{html_links}</ul>"
+                    )
+
+            msg.set_content(body_text)
+            if body_html:
+                msg.add_alternative(body_html, subtype="html")
+            for att in inline:
                 data = Path(att.storage_path).read_bytes()
                 maintype, _, subtype = (att.content_type or "application/octet-stream").partition(
                     "/"

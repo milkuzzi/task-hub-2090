@@ -12,14 +12,13 @@ export function AttachmentLink({ taskId, att }: { taskId: string; att: Attachmen
       </a>
     );
   }
-  const onClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
+  const onClick = async () => {
     const blob = await api.downloadAttachment(taskId, att.id);
     saveBlob(blob, att.filename ?? 'file');
   };
   return (
-    <a className="attach-link" href="#" onClick={onClick}>
+    <button type="button" className="attach-link" onClick={onClick}>
       {att.filename}
-    </a>
+    </button>
   );
 }

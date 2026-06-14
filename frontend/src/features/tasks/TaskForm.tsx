@@ -132,13 +132,15 @@ export default function TaskForm({
       </div>
 
       <div className="field">
-        <label>Ссылки</label>
+        <label htmlFor="task-links">Ссылки</label>
         {links.map((link, idx) => (
           <div className="form-row" key={idx}>
             <input
+              id={idx === 0 ? 'task-links' : undefined}
               type="url"
               value={link}
               placeholder="https://"
+              aria-label={`Ссылка ${idx + 1}`}
               onChange={(e) => updateLink(idx, e.target.value)}
             />
             <button type="button" className="btn" onClick={() => removeLink(idx)}>

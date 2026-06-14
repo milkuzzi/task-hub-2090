@@ -22,17 +22,17 @@ from app.notifications.channel import (
 )
 
 
-def _split_attachments(m: Message) -> tuple[str, list[Attachment]]:
+def _degraded_body(m: Message) -> str:
+    """MAX публикует только текст (по дизайну канал не шлёт файлы). Проблемные
+    вложения (заблокированный тип или превышение размера) перечисляем ссылками
+    в теле — они дублируются почтой."""
     blocked = settings.max_blocked_ext_set
     max_size = settings.max_file_size_mb * 1024 * 1024
-    sendable: list[Attachment] = []
     degraded: list[Attachment] = []
     for a in m.attachments:
         ext = Path(a.filename).suffix.lower()
         if ext in blocked or a.size > max_size:
             degraded.append(a)
-        else:
-            sendable.append(a)
     body = m.body_text
     if degraded:
         links = "\n".join(f"• {a.filename}: {a.public_url}" for a in degraded)
@@ -40,7 +40,7 @@ def _split_attachments(m: Message) -> tuple[str, list[Attachment]]:
             "\n\nЧасть вложений недоступна в MAX, они отправлены на почту "
             f"и доступны по ссылке:\n{links}"
         )
-    return body, sendable
+    return body
 
 
 class MaxChannel:
@@ -53,7 +53,7 @@ class MaxChannel:
         if not self.can_send(r):
             return DeliveryResult(self.kind, DeliveryStatus.SKIPPED, "no max binding")
         try:
-            body, _sendable = _split_attachments(m)
+            body = _degraded_body(m)
             payload = {"chat_id": r.max_ref, "text": body}
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(

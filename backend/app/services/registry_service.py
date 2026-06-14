@@ -21,8 +21,10 @@ from app.storage.base import get_storage
 TOMBSTONE_NAME = "Пользователь удалён"
 
 
-async def _to_item(db: AsyncSession, entry) -> RegistryItemOut:
-    user = await users_repo.get_active_by_email(db, entry.email)
+async def _to_item(db: AsyncSession, entry, *, user=None) -> RegistryItemOut:
+    # user можно передать заранее (батч-выборка), иначе берём точечно по e-mail.
+    if user is None:
+        user = await users_repo.get_active_by_email(db, entry.email)
     return RegistryItemOut(
         id=entry.id,
         email=entry.email,
@@ -40,7 +42,9 @@ async def list_registry(
     rows, total = await registry_repo.list_entries(
         db, query=query, page=page, page_size=page_size
     )
-    items = [await _to_item(db, r) for r in rows]
+    # Один батч-запрос вместо N точечных get_active_by_email (анти-N+1).
+    users_by_email = await users_repo.get_active_by_emails(db, [r.email for r in rows])
+    items = [await _to_item(db, r, user=users_by_email.get(r.email)) for r in rows]
     return items, total
 
 
