@@ -63,6 +63,14 @@ def self_transfer() -> AppError:
     return AppError(400, "SELF_TRANSFER", "Нельзя передать администрирование самому себе.")
 
 
+def self_as_observer() -> AppError:
+    return AppError(400, "SELF_AS_OBSERVER", "Нельзя добавить себя в наблюдатели.")
+
+
+def assignee_as_observer() -> AppError:
+    return AppError(400, "ASSIGNEE_AS_OBSERVER", "Исполнитель не может быть наблюдателем.")
+
+
 def not_sole_admin() -> AppError:
     return AppError(
         409,

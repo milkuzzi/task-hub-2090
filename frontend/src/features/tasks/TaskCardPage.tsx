@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/shared/ui/Modal';
 import { Spinner, EmptyState } from '@/shared/ui/Spinner';
 import { AttachmentLink } from '@/shared/ui/AttachmentLink';
 import TaskForm from './TaskForm';
+import DeadlineProgress from './DeadlineProgress';
 
 const STATUSES: TaskStatus[] = ['in_progress', 'done', 'cancelled'];
 
@@ -154,6 +155,7 @@ export default function TaskCardPage() {
       <div className="field">
         <label>{STR.fDeadline}</label>
         <div className="field-value">{formatDeadline(task.deadline, task.deadlineHasTime)}</div>
+        <DeadlineProgress item={task} />
       </div>
 
       <div className="field">

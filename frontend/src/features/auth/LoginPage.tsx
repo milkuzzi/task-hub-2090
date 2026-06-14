@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AuthBrand } from '@/shared/ui/AuthBrand';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api/client';
-import { errorMessage } from '@/shared/api/http';
+import { errorCode, errorMessage } from '@/shared/api/http';
 import { useAuthStore } from '@/shared/auth/store';
 import { STR } from '@/shared/strings';
 
@@ -29,7 +29,11 @@ export default function LoginPage() {
       setSession(res.accessToken, res.user);
       navigate('/author');
     } catch (err) {
-      setError(errorMessage(err));
+      // 401 на самом логине — это неверные учётные данные, а не «истёкшая
+      // сессия»: показываем понятное сообщение. Прочие ошибки (доступ отозван,
+      // слишком много попыток) уже несут конкретный текст бэкенда.
+      const code = errorCode(err);
+      setError(code === 'UNAUTHENTICATED' ? 'Неверный email или пароль' : errorMessage(err));
     } finally {
       setLoading(false);
     }

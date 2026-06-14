@@ -16,7 +16,6 @@ export default function RegistryPage() {
 
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [maxContact, setMaxContact] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
 
@@ -34,12 +33,10 @@ export default function RegistryPage() {
       api.createRegistry({
         email,
         fullName: fullName.trim() ? fullName.trim() : null,
-        maxContact: maxContact.trim() ? maxContact.trim() : null,
       }),
     onSuccess: () => {
       setEmail('');
       setFullName('');
-      setMaxContact('');
       setFormError(null);
       qc.invalidateQueries({ queryKey: ['registry'] });
     },
@@ -138,14 +135,6 @@ export default function RegistryPage() {
             id="reg-fullname"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="reg-max">MAX</label>
-          <input
-            id="reg-max"
-            value={maxContact}
-            onChange={(e) => setMaxContact(e.target.value)}
           />
         </div>
         <p className="muted">{STR.inviteHint}</p>

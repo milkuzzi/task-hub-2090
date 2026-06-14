@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TaskRole } from '@/shared/types';
 import { api } from '@/shared/api/client';
@@ -15,6 +16,7 @@ interface TasksTabPageProps {
 export default function TasksTabPage({ role }: TasksTabPageProps) {
   const navigate = useNavigate();
   const { sort, toggle } = useTableSort();
+  const [search, setSearch] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', role],
@@ -45,6 +47,20 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
     role === 'author' ? STR.tabAuthor : role === 'assignee' ? STR.tabAssignee : STR.tabObserver;
   const items = sortItems(data?.items ?? [], sort);
 
+  // Клиентский фильтр по уже загруженному списку (page_size 500): совпадение по
+  // названию (подстрока без учёта регистра) ИЛИ по ID — 6-значному коду (code)
+  // или порядковому номеру (seqNo), если запрос содержит цифры.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    const digits = q.replace(/\D/g, '');
+    return items.filter((t) => {
+      if (t.title.toLowerCase().includes(q)) return true;
+      if (digits && (t.code.includes(digits) || String(t.seqNo).includes(digits))) return true;
+      return false;
+    });
+  }, [items, search]);
+
   return (
     <div className="panel">
       <div className="between">
@@ -62,16 +78,30 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
       </div>
       {isLoading ? (
         <Spinner />
-      ) : items.length === 0 ? (
-        <EmptyState text={STR.empty} />
       ) : (
-        <TasksTable
-          items={items}
-          role={role}
-          sort={sort}
-          onToggle={toggle}
-          onRowClick={(id) => navigate('/tasks/' + id)}
-        />
+        <>
+          <div className="field tasks-search">
+            <input
+              id="tasks-search"
+              type="search"
+              aria-label={STR.searchPlaceholder}
+              placeholder={STR.searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <EmptyState text={search.trim() ? STR.nothingFound : STR.empty} />
+          ) : (
+            <TasksTable
+              items={filtered}
+              role={role}
+              sort={sort}
+              onToggle={toggle}
+              onRowClick={(id) => navigate('/tasks/' + id)}
+            />
+          )}
+        </>
       )}
     </div>
   );

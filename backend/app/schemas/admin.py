@@ -27,13 +27,11 @@ class RegistryListResponse(CamelModel):
 class RegistryCreateIn(CamelModel):
     email: EmailStr
     full_name: str | None = None
-    max_contact: str | None = None
 
 
 class RegistryUpdateIn(CamelModel):
     email: EmailStr | None = None
     full_name: str | None = None
-    max_contact: str | None = None
 
 
 class TransferAdminIn(CamelModel):

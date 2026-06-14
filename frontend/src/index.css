@@ -509,6 +509,11 @@ h2 { margin: 0 0 var(--s5); font-size: 20px; font-weight: 600; letter-spacing: 0
 
 /* --- Deadline counter --- */
 .deadline-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
   color: var(--accent-hover);
@@ -522,6 +527,40 @@ h2 { margin: 0 0 var(--s5); font-size: 20px; font-weight: 600; letter-spacing: 0
   background: var(--danger-soft);
   border-color: var(--danger-line);
   color: var(--danger);
+}
+.deadline-counter-link {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.deadline-counter.over .deadline-counter-link {
+  color: var(--danger);
+}
+
+/* --- Tasks search (per-tab) --- */
+.tasks-search { margin-bottom: var(--s4); }
+.tasks-search input { width: 100%; }
+
+/* --- Deadline progress bar (time-to-deadline) --- */
+.deadline-progress {
+  width: 100%;
+  min-width: 64px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--subtle);
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+}
+.deadline-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.deadline-progress-fill.ok { background: var(--ok); }
+.deadline-progress-fill.warn { background: var(--warn); }
+.deadline-progress-fill.danger { background: var(--danger); }
+@media (prefers-reduced-motion: reduce) {
+  .deadline-progress-fill { transition: none; }
 }
 
 /* --- Spinner / empty --- */

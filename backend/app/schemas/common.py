@@ -62,13 +62,13 @@ class TaskListItemOut(CamelModel):
     author: UserRefOut
     observers: list[UserRefOut] = []
     assignee_marked_ready: bool = False
+    created_at: datetime
 
 
 class TaskDetailOut(TaskListItemOut):
     description: str | None = None
     attachments: list[AttachmentOut] = []
     report: ReportOut | None = None
-    created_at: datetime
     updated_at: datetime
 
 

@@ -51,13 +51,13 @@ export interface TaskListItem {
   author: UserRef;
   observers: UserRef[];
   assigneeMarkedReady: boolean;
+  createdAt: string;
 }
 
 export interface TaskDetail extends TaskListItem {
   description: string | null;
   attachments: Attachment[];
   report: ReportOut | null;
-  createdAt: string;
   updatedAt: string;
 }
 
@@ -88,7 +88,6 @@ export interface RegistryListResponse {
 export interface RegistryInput {
   email: string;
   fullName?: string | null;
-  maxContact?: string | null;
 }
 
 export interface TransferAdminResult {

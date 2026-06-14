@@ -15,6 +15,39 @@ export function daysToDeadline(iso: string): number {
   return Math.ceil(diff / 86_400_000);
 }
 
+/** Порог «меньше суток» (мс) — ниже него остаток показываем в часах/минутах. */
+export const DAY_MS = 86_400_000;
+
+/**
+ * Остаток времени до срока в формате «часы/минуты» для дедлайнов ближе суток.
+ * Чистая функция от миллисекунд остатка (удобно тестировать):
+ * «5 ч 30 мин», «30 мин» (<1 ч), «0 мин» (срок наступил).
+ */
+export function formatRemaining(ms: number): string {
+  if (ms <= 0) return '0 мин';
+  const totalMinutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours} ч ${minutes} мин` : `${minutes} мин`;
+}
+
+/**
+ * Доля прошедшего времени окна задачи в диапазоне [0..1]:
+ * (now - created) / (due - created). Чем ближе к 1 — тем ближе дедлайн.
+ * Некорректное/нулевое окно (due ≤ created) считаем заполненным (1).
+ */
+export function deadlineProgress(
+  createdAtIso: string,
+  dueAtIso: string,
+  nowMs: number = Date.now(),
+): number {
+  const start = new Date(createdAtIso).getTime();
+  const end = new Date(dueAtIso).getTime();
+  if (!(end > start)) return 1;
+  const frac = (nowMs - start) / (end - start);
+  return Math.min(1, Math.max(0, frac));
+}
+
 /** Для <input type="datetime-local"> / "date" — локальное представление. */
 export function toInputValue(iso: string | undefined, hasTime: boolean): string {
   const d = iso ? new Date(iso) : new Date();

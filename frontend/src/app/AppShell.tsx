@@ -8,7 +8,6 @@ const TABS = [
   { to: '/author', label: STR.tabAuthor },
   { to: '/assignee', label: STR.tabAssignee },
   { to: '/observer', label: STR.tabObserver },
-  { to: '/search', label: STR.search },
 ];
 
 export function AppShell() {

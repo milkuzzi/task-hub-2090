@@ -71,6 +71,7 @@ def task_list_item(task: Task) -> TaskListItemOut:
         author=user_ref(task.author),
         observers=[observer_ref(o) for o in task.observers],
         assignee_marked_ready=bool(task.report and task.report.ready_flag),
+        created_at=task.created_at,
     )
 
 
@@ -90,6 +91,5 @@ def task_detail(task: Task) -> TaskDetailOut:
         description=task.description,
         attachments=[attachment_out(a, task_id=task.id) for a in task.attachments],
         report=report_out,
-        created_at=task.created_at,
         updated_at=task.updated_at,
     )

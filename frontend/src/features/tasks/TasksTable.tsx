@@ -2,6 +2,7 @@ import type { TaskListItem, TaskRole } from '@/shared/types';
 import { StatusBadge, OverdueBadge, ReadyBadge, ReassignBadge } from '@/shared/ui/Badge';
 import { formatDeadline } from '@/shared/lib/date';
 import { isVisuallyOverdue } from '@/shared/lib/overdue';
+import DeadlineProgress from './DeadlineProgress';
 import type { SortField, SortState } from './useTableSort';
 
 interface TasksTableProps {
@@ -79,6 +80,7 @@ export default function TasksTable({ items, role, sort, onToggle, onRowClick }: 
               label="Срок"
               onToggle={onToggle}
             />
+            <th>До срока</th>
             <SortHeader sort={sort} field="status" label="Статус" onToggle={onToggle} />
             <th>Просрочка</th>
             {showReadiness ? <th>Готовность</th> : null}
@@ -111,6 +113,9 @@ export default function TasksTable({ items, role, sort, onToggle, onRowClick }: 
               </td>
               <td className="num" data-label="Срок">
                 {formatDeadline(item.deadline, item.deadlineHasTime)}
+              </td>
+              <td data-label="До срока">
+                <DeadlineProgress item={item} />
               </td>
               <td data-label="Статус">
                 <StatusBadge status={item.status} />

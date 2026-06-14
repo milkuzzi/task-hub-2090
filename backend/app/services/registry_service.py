@@ -61,11 +61,12 @@ async def create_entry(db: AsyncSession, data: RegistryCreateIn) -> RegistryItem
     if await registry_repo.is_listed(db, data.email):
         raise errors.email_already_registered()
     # Админ через реестр НЕ выдаётся — только консоль и передача администрирования.
+    # MAX (max_user_id) администратор не задаёт — поле станет пользовательским позже.
     entry = await registry_repo.create(
         db,
         email=data.email,
         full_name=data.full_name,
-        max_user_id=data.max_contact,
+        max_user_id=None,
         is_admin=False,
     )
 
@@ -107,8 +108,7 @@ async def update_entry(
         entry.email = data.email
     if data.full_name is not None:
         entry.full_name = data.full_name
-    if data.max_contact is not None:
-        entry.max_user_id = data.max_contact
+    # MAX (max_user_id) администратор не меняет — поле станет пользовательским позже.
     # is_admin через реестр не меняется (только консоль и передача администрирования).
     await db.commit()
     return await _to_item(db, entry)

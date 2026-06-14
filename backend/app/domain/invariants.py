@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from app.core.config import settings
-from app.core.errors import validation_error
+from app.core.errors import assignee_as_observer, self_as_observer, validation_error
 
 
 def validate_title(title: str) -> str:
@@ -33,14 +33,12 @@ def validate_observers(
         raise validation_error(
             [{"field": "observers", "message": f"Не более {settings.max_observers} наблюдателей."}]
         )
-    if assignee_id in deduped:
-        raise validation_error(
-            [{"field": "observers", "message": "Исполнитель не может быть наблюдателем."}]
-        )
+    # Доменные ошибки 400 с понятным текстом верхнего уровня (фронт показывает
+    # error.message): «себя нельзя в наблюдатели», «исполнитель ≠ наблюдатель».
     if author_id in deduped:
-        raise validation_error(
-            [{"field": "observers", "message": "Постановщик не может быть наблюдателем."}]
-        )
+        raise self_as_observer()
+    if assignee_id in deduped:
+        raise assignee_as_observer()
     return deduped
 
 

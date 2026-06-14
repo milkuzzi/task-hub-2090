@@ -52,7 +52,19 @@ async def test_observer_cannot_equal_assignee(client, db):
     assignee = await make_user(db, "b@s.ru")
     payload = _payload(assignee.id, observerIds=[str(assignee.id)])
     r = await client.post("/api/v1/tasks", json=payload, headers=auth_header(author))
-    assert r.status_code == 422
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "ASSIGNEE_AS_OBSERVER"
+
+
+async def test_author_cannot_be_observer(client, db):
+    author = await make_user(db, "a@s.ru")
+    assignee = await make_user(db, "b@s.ru")
+    payload = _payload(assignee.id, observerIds=[str(author.id)])
+    r = await client.post("/api/v1/tasks", json=payload, headers=auth_header(author))
+    assert r.status_code == 400
+    body = r.json()
+    assert body["error"]["code"] == "SELF_AS_OBSERVER"
+    assert body["error"]["message"] == "Нельзя добавить себя в наблюдатели."
 
 
 async def test_valid_task_creates_with_seq_and_code(client, db):

@@ -8,7 +8,6 @@ import ResetConfirmPage from '@/features/auth/ResetConfirmPage';
 import TasksTabPage from '@/features/tasks/TasksTabPage';
 import TaskCreatePage from '@/features/tasks/TaskCreatePage';
 import TaskCardPage from '@/features/tasks/TaskCardPage';
-import SearchPage from '@/features/search/SearchPage';
 import RegistryPage from '@/features/admin/RegistryPage';
 
 export const router = createBrowserRouter([
@@ -26,7 +25,6 @@ export const router = createBrowserRouter([
       { path: 'observer', element: <TasksTabPage role="observer" /> },
       { path: 'tasks/new', element: <TaskCreatePage /> },
       { path: 'tasks/:id', element: <TaskCardPage /> },
-      { path: 'search', element: <SearchPage /> },
       {
         path: 'admin',
         element: <AdminGuard />,

@@ -54,8 +54,6 @@ export const api = {
     http.post<TaskDetail>(`/tasks/${id}/report`, { text }).then((r) => r.data),
   markReady: (id: string, text?: string) =>
     http.post(`/tasks/${id}/mark-ready`, { text }).then((r) => r.data),
-  searchByCode: (code: string) =>
-    http.get<TaskDetail>('/tasks/search', { params: { code } }).then((r) => r.data),
   addAttachment: (id: string, scope: 'task' | 'report', form: FormData) =>
     http
       .post(`/tasks/${id}/attachments`, form, { params: { scope } })

@@ -12,7 +12,6 @@ export const STR = {
   tabAssignee: 'Я исполнитель',
   tabObserver: 'Я наблюдатель',
   admin: 'Администрирование',
-  search: 'Поиск по ID',
   logout: 'Выйти',
   addTask: 'Добавить задачу',
 
@@ -72,6 +71,10 @@ export const STR = {
   loading: 'Загрузка…',
   taskUnavailable: 'Задача недоступна.',
   daysToDeadline: 'Дней до ближайшего дедлайна',
+  timeToDeadline: 'До ближайшего дедлайна',
+  goToNearestDeadline: 'Перейти к задаче',
+  searchPlaceholder: 'Поиск по названию или ID…',
+  nothingFound: 'Ничего не найдено.',
   deadlinePassed: 'дедлайн прошёл',
 } as const;
 
