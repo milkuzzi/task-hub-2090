@@ -3,17 +3,21 @@
 
 from __future__ import annotations
 
-from datetime import date
+import logging
+import uuid
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
-from app.core.clock import now, to_org_tz, today
+from app.core.clock import now, start_of_day, to_org_tz, today
 from app.core.config import settings
+from app.db.session import SessionFactory
 from app.domain.enums import DueMode, NotifyEvent, TaskStatus
 from app.domain.notifications import templates
 from app.domain.notifications.schedule import due_event_for
-from app.domain.overdue import due_date_local, is_overdue
+from app.domain.overdue import due_date_local, due_moment, is_overdue
 from app.models import Task, User
 from app.notifications.channel import (
     CHANNEL_ORDER,
@@ -27,22 +31,31 @@ from app.notifications.registry import get_channel
 from app.repositories import outbox_repo, registry_repo, tasks_repo
 from app.storage.base import get_storage
 
+log = logging.getLogger("notifications")
+
 # --- Процесс A: материализация флага «Просрочена» (§13.4.2) ---
 
 
 async def overdue_sweep(db: AsyncSession) -> int:
-    """Лёгкий частый проход: проставляет is_overdue/overdue_since по факту."""
+    """Лёгкий частый проход: проставляет is_overdue/overdue_since по факту.
+
+    Отношения задачи (наблюдатели/вложения/отчёт) намеренно не подгружаем
+    (`noload`) — проходу нужны только due_at/due_mode/status, а лишние выборки
+    каждые несколько минут зря нагружают воркер на скромном VPS.
+    """
     res = await db.execute(
-        select(Task).where(
-            Task.status == TaskStatus.IN_PROGRESS, Task.is_overdue.is_(False)
-        )
+        select(Task)
+        .options(noload("*"))
+        .where(Task.status == TaskStatus.IN_PROGRESS, Task.is_overdue.is_(False))
     )
     moment_now = now()
     changed = 0
-    for task in res.unique().scalars().all():
+    for task in res.scalars().all():
         if is_overdue(moment_now, task.due_at, task.due_mode):
             task.is_overdue = True
-            task.overdue_since = moment_now  # факт, не сбрасывается автоматически
+            # Фиксируем фактический момент наступления просрочки (неизменяем),
+            # а не время прохода sweep — иначе значение «опаздывает» после простоя.
+            task.overdue_since = due_moment(task.due_at, task.due_mode)
             changed += 1
     if changed:
         await db.commit()
@@ -168,35 +181,58 @@ async def _emit(
     await db.commit()
 
 
+async def _emit_assigned(db: AsyncSession, task: Task) -> None:
+    """Событие №1 (постановка): исполнитель + наблюдатели, одноразово (идемпотентно)."""
+    await _emit(
+        db,
+        task,
+        NotifyEvent.ASSIGNED,
+        task.assignee,
+        _message_for(task, NotifyEvent.ASSIGNED, is_observer=False),
+        due_version=None,
+        run_date=None,
+    )
+    for obs in task.observers:
+        if obs.user is not None:
+            await _emit(
+                db,
+                task,
+                NotifyEvent.ASSIGNED,
+                obs.user,
+                _message_for(task, NotifyEvent.ASSIGNED, is_observer=True),
+                due_version=None,
+                run_date=None,
+            )
+
+
+async def notify_assignment(task_id: uuid.UUID) -> None:
+    """Разослать уведомление о постановке сразу при создании задачи (§9, событие 1).
+
+    Запускается фоном после ответа API (FastAPI BackgroundTasks): открывает
+    собственную сессию, чтобы не блокировать HTTP-ответ ожиданием SMTP.
+    Идемпотентность общая с суточным прогоном — повторов не будет.
+    """
+    async with SessionFactory() as db:
+        task = await tasks_repo.get_full(db, task_id)
+        if task is None:
+            return
+        try:
+            await _emit_assigned(db, task)
+        except Exception:  # noqa: BLE001 — фоновая рассылка не должна падать наружу
+            log.exception("notify_assignment: ошибка рассылки для задачи %s", task_id)
+
+
 async def daily_run(db: AsyncSession, run_date: date | None = None) -> None:
     """Раз в сутки: события 1–4 (§13.4.5)."""
     run_date = run_date or today()
-    tasks = await tasks_repo.iter_active_tasks_for_notifications(db)
+    # Ограничиваем выборку: открытые задачи + недавно созданные (страховка по
+    # событию №1). Иначе прогон линейно растёт по всей истории задач.
+    recent_since = start_of_day(run_date - timedelta(days=2))
+    tasks = await tasks_repo.iter_active_tasks_for_notifications(db, recent_since=recent_since)
 
     for task in tasks:
-        assignee = task.assignee
-
         # СОБЫТИЕ 1 — постановка (исполнитель + наблюдатели), одноразово
-        await _emit(
-            db,
-            task,
-            NotifyEvent.ASSIGNED,
-            assignee,
-            _message_for(task, NotifyEvent.ASSIGNED, is_observer=False),
-            due_version=None,
-            run_date=None,
-        )
-        for obs in task.observers:
-            if obs.user is not None:
-                await _emit(
-                    db,
-                    task,
-                    NotifyEvent.ASSIGNED,
-                    obs.user,
-                    _message_for(task, NotifyEvent.ASSIGNED, is_observer=True),
-                    due_version=None,
-                    run_date=None,
-                )
+        await _emit_assigned(db, task)
 
         # СОБЫТИЯ 2–4 — только для открытых задач, только исполнителю
         if task.status != TaskStatus.IN_PROGRESS:
@@ -208,7 +244,7 @@ async def daily_run(db: AsyncSession, run_date: date | None = None) -> None:
                 db,
                 task,
                 event,
-                assignee,
+                task.assignee,
                 _message_for(task, event, is_observer=False),
                 due_version=task.due_version,
                 run_date=run_date,

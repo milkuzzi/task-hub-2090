@@ -23,7 +23,12 @@ export function toInputValue(iso: string | undefined, hasTime: boolean): string 
   return hasTime ? `${date}T${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
 }
 
-/** Значение из input → ISO для отправки на сервер. */
+/**
+ * Значение из input → строка для отправки на сервер.
+ * Отправляем НАИВНУЮ локальную дату/время (без TZ-суффикса): сервер трактует её
+ * в таймзоне организации (Europe/Moscow). Так выбранная пользователем дата не
+ * «съезжает» на соседние сутки из-за пересчёта в UTC (важно для режима «только дата»).
+ */
 export function fromInputValue(value: string, hasTime: boolean): string {
-  return new Date(hasTime ? value : `${value}T23:59:59`).toISOString();
+  return hasTime ? `${value}:00` : `${value}T23:59:59`;
 }

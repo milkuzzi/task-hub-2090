@@ -7,7 +7,7 @@ import type { Attachment } from '@/shared/types';
 export function AttachmentLink({ taskId, att }: { taskId: string; att: Attachment }) {
   if (att.kind === 'url') {
     return (
-      <a href={att.url ?? '#'} target="_blank" rel="noreferrer">
+      <a className="attach-link" href={att.url ?? '#'} target="_blank" rel="noreferrer">
         {att.url}
       </a>
     );
@@ -18,7 +18,7 @@ export function AttachmentLink({ taskId, att }: { taskId: string; att: Attachmen
     saveBlob(blob, att.filename ?? 'file');
   };
   return (
-    <a href="#" onClick={onClick}>
+    <a className="attach-link" href="#" onClick={onClick}>
       {att.filename}
     </a>
   );

@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGuard } from './AuthGuard';
 import { AdminGuard } from './AdminGuard';
+import { RouteError } from './RouteError';
 import LoginPage from '@/features/auth/LoginPage';
 import RegisterPage from '@/features/auth/RegisterPage';
 import ResetRequestPage from '@/features/auth/ResetRequestPage';
@@ -12,13 +13,14 @@ import SearchPage from '@/features/search/SearchPage';
 import RegistryPage from '@/features/admin/RegistryPage';
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  { path: '/register', element: <RegisterPage /> },
-  { path: '/reset', element: <ResetRequestPage /> },
-  { path: '/reset/confirm', element: <ResetConfirmPage /> },
+  { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
+  { path: '/register', element: <RegisterPage />, errorElement: <RouteError /> },
+  { path: '/reset', element: <ResetRequestPage />, errorElement: <RouteError /> },
+  { path: '/reset/confirm', element: <ResetConfirmPage />, errorElement: <RouteError /> },
   {
     path: '/',
     element: <AuthGuard />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Navigate to="/author" replace /> },
       { path: 'author', element: <TasksTabPage role="author" /> },

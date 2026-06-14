@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,13 @@ from app.schemas.common import (
 )
 from app.schemas.reports import MarkReadyIn, MarkReadyOut, ReportIn
 from app.schemas.tasks import StatusIn, TaskCreateIn, TaskUpdateIn
-from app.services import attachment_service, export_service, report_service, task_service
+from app.services import (
+    attachment_service,
+    export_service,
+    notification_service,
+    report_service,
+    task_service,
+)
 from app.storage.base import get_storage
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -46,10 +52,14 @@ def _parse_status(value: str | None) -> TaskStatus | None:
 @router.post("", response_model=TaskDetailOut, status_code=201)
 async def create_task(
     body: TaskCreateIn,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     task = await task_service.create_task(db, user, body)
+    # Уведомление о постановке (§9, событие 1) — сразу, но фоном: не блокируем
+    # ответ ожиданием SMTP. Идемпотентность общая с суточным прогоном.
+    background.add_task(notification_service.notify_assignment, task.id)
     return task_detail(task)
 
 

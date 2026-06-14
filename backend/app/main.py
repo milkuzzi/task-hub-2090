@@ -4,6 +4,7 @@ security-заголовки (§13.3, §13.5.2, §13.7.4)."""
 from __future__ import annotations
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -90,7 +91,36 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+class RequestIDMiddleware:
+    """Сквозной идентификатор запроса для диагностики без DevOps.
+
+    Берёт входящий `X-Request-ID` (от внешнего прокси/туннеля) либо генерирует
+    новый и возвращает его в ответе. Помогает связать строки логов одного запроса.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        incoming = dict(scope.get("headers") or {})
+        rid = incoming.get(b"x-request-id")
+        request_id = rid.decode("latin-1") if rid else uuid.uuid4().hex
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                headers.append((b"x-request-id", request_id.encode("latin-1")))
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

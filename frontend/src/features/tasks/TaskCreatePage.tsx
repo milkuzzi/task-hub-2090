@@ -20,7 +20,7 @@ export default function TaskCreatePage() {
 
   return (
     <div>
-      <h2>{STR.addTask}</h2>
+      <h1>{STR.addTask}</h1>
       <TaskForm
         submitLabel={STR.save}
         onSubmit={(input) => mutation.mutate(input)}

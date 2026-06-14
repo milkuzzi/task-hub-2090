@@ -8,6 +8,14 @@
 {$SITE_ADDRESS} {
 	encode gzip
 
+	# Базовые security-заголовки для статики SPA (для API их добавляет backend).
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
 	# API → backend (тот же origin, без CORS)
 	handle /api/* {
 		reverse_proxy backend:8000

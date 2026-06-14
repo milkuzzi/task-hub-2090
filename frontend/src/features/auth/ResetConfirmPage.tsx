@@ -50,6 +50,7 @@ export default function ResetConfirmPage() {
                 <input
                   id="reset-new-password"
                   type="password"
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   minLength={8}

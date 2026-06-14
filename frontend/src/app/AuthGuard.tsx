@@ -23,7 +23,7 @@ export function AuthGuard() {
     };
   }, [token]);
 
-  if (state === 'loading') return <Spinner />;
+  if (state === 'loading') return <Spinner fullscreen />;
   if (state === 'out') return <Navigate to="/login" replace />;
   return <AppShell />;
 }

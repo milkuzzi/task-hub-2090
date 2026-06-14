@@ -11,9 +11,17 @@ interface TaskFormProps {
   onSubmit: (input: CreateTaskInput) => void;
   busy?: boolean;
   error?: string;
+  surface?: 'panel' | 'plain';
 }
 
-export default function TaskForm({ initial, submitLabel, onSubmit, busy, error }: TaskFormProps) {
+export default function TaskForm({
+  initial,
+  submitLabel,
+  onSubmit,
+  busy,
+  error,
+  surface = 'panel',
+}: TaskFormProps) {
   const [title, setTitle] = useState<string>(initial?.title ?? '');
   const [description, setDescription] = useState<string>(initial?.description ?? '');
   const [dueMode, setDueMode] = useState<DueMode>(initial?.dueMode ?? 'datetime');
@@ -51,6 +59,10 @@ export default function TaskForm({ initial, submitLabel, onSubmit, busy, error }
       setLocalError('Выберите исполнителя');
       return;
     }
+    if (!deadline) {
+      setLocalError('Укажите срок');
+      return;
+    }
     setLocalError('');
     const input: CreateTaskInput = {
       title: title.trim(),
@@ -65,28 +77,40 @@ export default function TaskForm({ initial, submitLabel, onSubmit, busy, error }
   };
 
   return (
-    <form className="panel" onSubmit={handleSubmit}>
+    <form
+      className={surface === 'panel' ? 'panel task-form' : 'task-form'}
+      onSubmit={handleSubmit}
+    >
       <div className="field">
-        <label>{STR.fTitle}</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="task-title">{STR.fTitle}</label>
+        <input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
 
       <div className="field">
-        <label>{STR.fDescription}</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        <label htmlFor="task-description">{STR.fDescription}</label>
+        <textarea
+          id="task-description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
       </div>
 
       <div className="field">
-        <label>Режим срока</label>
-        <select value={dueMode} onChange={(e) => changeMode(e.target.value as DueMode)}>
+        <label htmlFor="task-due-mode">Режим срока</label>
+        <select
+          id="task-due-mode"
+          value={dueMode}
+          onChange={(e) => changeMode(e.target.value as DueMode)}
+        >
           <option value="datetime">Дата и время</option>
           <option value="date">Только дата</option>
         </select>
       </div>
 
       <div className="field">
-        <label>{STR.fDeadline}</label>
+        <label htmlFor="task-deadline">{STR.fDeadline}</label>
         <input
+          id="task-deadline"
           type={dueMode === 'datetime' ? 'datetime-local' : 'date'}
           value={deadline}
           onChange={(e) => setDeadline(e.target.value)}
@@ -94,19 +118,23 @@ export default function TaskForm({ initial, submitLabel, onSubmit, busy, error }
       </div>
 
       <div className="field">
-        <label>{STR.fAssignee}</label>
-        <AssigneePicker value={assigneeId} onChange={setAssigneeId} />
+        <label htmlFor="task-assignee">{STR.fAssignee}</label>
+        <AssigneePicker id="task-assignee" value={assigneeId} onChange={setAssigneeId} />
       </div>
 
       <div className="field">
-        <label>{STR.fObservers}</label>
-        <ObserversPicker value={observerIds} onChange={setObserverIds} />
+        <label id="task-observers-label">{STR.fObservers}</label>
+        <ObserversPicker
+          labelledBy="task-observers-label"
+          value={observerIds}
+          onChange={setObserverIds}
+        />
       </div>
 
       <div className="field">
         <label>Ссылки</label>
         {links.map((link, idx) => (
-          <div className="row" key={idx}>
+          <div className="form-row" key={idx}>
             <input
               type="url"
               value={link}
@@ -126,9 +154,11 @@ export default function TaskForm({ initial, submitLabel, onSubmit, busy, error }
       {localError && <div className="form-error">{localError}</div>}
       {error && <div className="form-error">{error}</div>}
 
-      <button type="submit" className="btn primary" disabled={busy}>
-        {submitLabel}
-      </button>
+      <div className="form-actions">
+        <button type="submit" className="btn primary" disabled={busy}>
+          {submitLabel}
+        </button>
+      </div>
     </form>
   );
 }

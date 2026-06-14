@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -208,7 +208,16 @@ async def anonymize_observer(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.flush()
 
 
-async def iter_active_tasks_for_notifications(db: AsyncSession) -> Sequence[Task]:
-    """Открытые задачи + недавно закрытые (для события №1) — для суточного прогона."""
-    res = await db.execute(select(Task).order_by(Task.task_no.asc()))
+async def iter_active_tasks_for_notifications(
+    db: AsyncSession, *, recent_since: datetime | None = None
+) -> Sequence[Task]:
+    """Задачи для суточного прогона: открытые + недавно созданные (страховка
+    по событию №1). Без `recent_since` — все задачи (обратная совместимость)."""
+    stmt = select(Task)
+    if recent_since is not None:
+        stmt = stmt.where(
+            or_(Task.status == TaskStatus.IN_PROGRESS, Task.created_at >= recent_since)
+        )
+    stmt = stmt.order_by(Task.task_no.asc())
+    res = await db.execute(stmt)
     return list(res.unique().scalars().all())

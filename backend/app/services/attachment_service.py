@@ -42,7 +42,10 @@ async def _read_limited(upload: UploadFile) -> bytes:
         if total > max_bytes:  # обрываем поток, не буферизуя гигантский файл
             raise errors.file_too_large()
         chunks.append(chunk)
-    return b"".join(chunks)
+    data = b"".join(chunks)
+    if not data:  # пустой файл — нечего хранить
+        raise errors.validation_error([{"field": "file", "message": "Файл пустой."}])
+    return data
 
 
 async def _count_files(db: AsyncSession, model, task_id: uuid.UUID) -> int:

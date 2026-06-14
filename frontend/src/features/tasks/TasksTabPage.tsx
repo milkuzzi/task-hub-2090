@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { TaskRole } from '@/shared/types';
 import { api } from '@/shared/api/client';
 import { STR } from '@/shared/strings';
+import { saveBlob } from '@/shared/lib/download';
 import { Spinner, EmptyState } from '@/shared/ui/Spinner';
 import TasksTable from './TasksTable';
 import { useTableSort, sortItems } from './useTableSort';
@@ -20,6 +21,26 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
     queryFn: () => api.listTasks({ role }),
   });
 
+  // Выгрузка под печать требует авторизации (Bearer), поэтому грузим её через
+  // axios (а не прямой ссылкой) и открываем готовый HTML из blob. Окно
+  // открываем синхронно по клику, чтобы не сработал блокировщик всплывающих окон.
+  const handlePrint = async () => {
+    const win = window.open('', '_blank');
+    try {
+      const blob = await api.exportTasks(role);
+      const url = URL.createObjectURL(blob);
+      if (win) {
+        win.location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else {
+        saveBlob(blob, `tasks-${role}.html`);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      win?.close();
+    }
+  };
+
   const title =
     role === 'author' ? STR.tabAuthor : role === 'assignee' ? STR.tabAssignee : STR.tabObserver;
   const items = sortItems(data?.items ?? [], sort);
@@ -27,14 +48,14 @@ export default function TasksTabPage({ role }: TasksTabPageProps) {
   return (
     <div className="panel">
       <div className="between">
-        <h2>{title}</h2>
+        <h1>{title}</h1>
         <div className="row">
           {role === 'author' ? (
             <button className="btn primary" onClick={() => navigate('/tasks/new')}>
               {STR.addTask}
             </button>
           ) : null}
-          <button className="btn" onClick={() => window.open(api.exportUrl(role), '_blank')}>
+          <button className="btn" onClick={handlePrint}>
             {STR.print}
           </button>
         </div>

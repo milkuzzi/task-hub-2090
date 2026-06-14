@@ -26,84 +26,105 @@ function arrow(sort: SortState, field: SortField): string {
   return sort.order === 'asc' ? ' ▲' : ' ▼';
 }
 
+function SortHeader({
+  sort,
+  field,
+  label,
+  className,
+  onToggle,
+}: {
+  sort: SortState;
+  field: SortField;
+  label: string;
+  className?: string;
+  onToggle: (f: SortField) => void;
+}) {
+  return (
+    <th className={className} aria-sort={ariaSort(sort, field)}>
+      <button type="button" className="table-sort" onClick={() => onToggle(field)}>
+        {label}
+        {arrow(sort, field)}
+      </button>
+    </th>
+  );
+}
+
 export default function TasksTable({ items, role, sort, onToggle, onRowClick }: TasksTableProps) {
   const showAuthorColumn = role === 'assignee';
   const personField: SortField = showAuthorColumn ? 'author' : 'assignee';
   const personLabel = showAuthorColumn ? 'Постановщик' : 'Исполнитель';
   const showReadiness = role === 'author';
 
+  const openFromKeyboard = (event: React.KeyboardEvent<HTMLTableRowElement>, id: string) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    onRowClick(id);
+  };
+
   return (
     <div className="table-scroll">
-    <table className="table">
-      <thead>
-        <tr>
-          <th
-            className="num"
-            aria-sort={ariaSort(sort, 'seqNo')}
-            onClick={() => onToggle('seqNo')}
-          >
-            №{arrow(sort, 'seqNo')}
-          </th>
-          <th
-            className="num"
-            aria-sort={ariaSort(sort, 'code')}
-            onClick={() => onToggle('code')}
-          >
-            ID{arrow(sort, 'code')}
-          </th>
-          <th aria-sort={ariaSort(sort, 'title')} onClick={() => onToggle('title')}>
-            Название{arrow(sort, 'title')}
-          </th>
-          <th aria-sort={ariaSort(sort, personField)} onClick={() => onToggle(personField)}>
-            {personLabel}
-            {arrow(sort, personField)}
-          </th>
-          <th
-            className="num"
-            aria-sort={ariaSort(sort, 'deadline')}
-            onClick={() => onToggle('deadline')}
-          >
-            Срок{arrow(sort, 'deadline')}
-          </th>
-          <th aria-sort={ariaSort(sort, 'status')} onClick={() => onToggle('status')}>
-            Статус{arrow(sort, 'status')}
-          </th>
-          <th>Просрочка</th>
-          {showReadiness ? <th>Готовность</th> : null}
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => (
-          <tr key={item.id} onClick={() => onRowClick(item.id)}>
-            <td className="num" data-label="№">
-              {item.seqNo}
-            </td>
-            <td className="num" data-label="ID">
-              {item.code}
-            </td>
-            <td data-label="Название">
-              {item.title}
-              {item.needsReassignment ? <ReassignBadge /> : null}
-            </td>
-            <td data-label={personLabel}>
-              {showAuthorColumn ? item.author.displayName : item.assignee.displayName}
-            </td>
-            <td className="num" data-label="Срок">
-              {formatDeadline(item.deadline, item.deadlineHasTime)}
-            </td>
-            <td data-label="Статус">
-              <StatusBadge status={item.status} />
-            </td>
-            <td data-label="Просрочка">
-              {isVisuallyOverdue(item) ? <OverdueBadge /> : <span className="muted">—</span>}
-            </td>
-            {showReadiness ? (
-              <td data-label="Готовность">{item.assigneeMarkedReady ? <ReadyBadge /> : '—'}</td>
-            ) : null}
+      <table className="table">
+        <thead>
+          <tr>
+            <SortHeader className="num" sort={sort} field="seqNo" label="№" onToggle={onToggle} />
+            <SortHeader className="num" sort={sort} field="code" label="ID" onToggle={onToggle} />
+            <SortHeader sort={sort} field="title" label="Название" onToggle={onToggle} />
+            <SortHeader sort={sort} field={personField} label={personLabel} onToggle={onToggle} />
+            <SortHeader
+              className="num"
+              sort={sort}
+              field="deadline"
+              label="Срок"
+              onToggle={onToggle}
+            />
+            <SortHeader sort={sort} field="status" label="Статус" onToggle={onToggle} />
+            <th>Просрочка</th>
+            {showReadiness ? <th>Готовность</th> : null}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr
+              key={item.id}
+              className="clickable-row"
+              tabIndex={0}
+              role="button"
+              onClick={() => onRowClick(item.id)}
+              onKeyDown={(event) => openFromKeyboard(event, item.id)}
+            >
+              <td className="num" data-label="№">
+                {item.seqNo}
+              </td>
+              <td className="num" data-label="ID">
+                {item.code}
+              </td>
+              <td data-label="Название">
+                <div className="cell-stack">
+                  <span>{item.title}</span>
+                  {item.needsReassignment ? <ReassignBadge /> : null}
+                </div>
+              </td>
+              <td data-label={personLabel}>
+                {showAuthorColumn ? item.author.displayName : item.assignee.displayName}
+              </td>
+              <td className="num" data-label="Срок">
+                {formatDeadline(item.deadline, item.deadlineHasTime)}
+              </td>
+              <td data-label="Статус">
+                <StatusBadge status={item.status} />
+              </td>
+              <td data-label="Просрочка">
+                {isVisuallyOverdue(item) ? <OverdueBadge /> : <span className="muted">—</span>}
+              </td>
+              {showReadiness ? (
+                <td data-label="Готовность">{item.assigneeMarkedReady ? <ReadyBadge /> : '—'}</td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

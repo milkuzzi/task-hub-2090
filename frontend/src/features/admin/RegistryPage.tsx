@@ -79,7 +79,7 @@ export default function RegistryPage() {
 
   return (
     <div className="panel">
-      <h2>{STR.admin}</h2>
+      <h1>{STR.admin}</h1>
 
       <form onSubmit={handleAdd}>
         <div className="field">
@@ -89,6 +89,7 @@ export default function RegistryPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
           />
         </div>
         <div className="field">
@@ -117,9 +118,11 @@ export default function RegistryPage() {
           <span>Админ</span>
         </div>
         {formError && <div className="form-error">{formError}</div>}
-        <button type="submit" className="btn primary" disabled={createMutation.isPending}>
-          Добавить
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn primary" disabled={createMutation.isPending}>
+            Добавить
+          </button>
+        </div>
       </form>
 
       <hr className="divider" />
@@ -130,56 +133,54 @@ export default function RegistryPage() {
         <EmptyState text={STR.empty} />
       ) : (
         <div className="table-scroll">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>E-mail</th>
-              <th>Имя</th>
-              <th>MAX</th>
-              <th>Админ</th>
-              <th>Зарегистрирован</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item) => (
-              <tr key={item.id}>
-                <td>{item.email}</td>
-                <td>{item.fullName ?? ''}</td>
-                <td>{item.maxContact ?? ''}</td>
-                <td>{item.isAdmin ? 'да' : ''}</td>
-                <td>{item.registered ? 'да' : 'нет'}</td>
-                <td>
-                  <div className="row">
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() =>
-                        setPending({ type: 'removeRegistry', id: item.id })
-                      }
-                    >
-                      Убрать из реестра
-                    </button>
-                    {item.userId && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>E-mail</th>
+                <th>Имя</th>
+                <th>MAX</th>
+                <th>Админ</th>
+                <th>Зарегистрирован</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((item) => (
+                <tr key={item.id}>
+                  <td data-label="E-mail">{item.email}</td>
+                  <td data-label="Имя">{item.fullName ?? ''}</td>
+                  <td data-label="MAX">{item.maxContact ?? ''}</td>
+                  <td data-label="Админ">{item.isAdmin ? 'да' : 'нет'}</td>
+                  <td data-label="Зарегистрирован">{item.registered ? 'да' : 'нет'}</td>
+                  <td data-label="Действия">
+                    <div className="form-actions">
                       <button
                         type="button"
-                        className="btn danger"
-                        onClick={() =>
-                          setPending({
-                            type: 'deleteUser',
-                            userId: item.userId as string,
-                          })
-                        }
+                        className="btn"
+                        onClick={() => setPending({ type: 'removeRegistry', id: item.id })}
                       >
-                        Удалить пользователя и архив
+                        Убрать из реестра
                       </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      {item.userId && (
+                        <button
+                          type="button"
+                          className="btn danger"
+                          onClick={() =>
+                            setPending({
+                              type: 'deleteUser',
+                              userId: item.userId as string,
+                            })
+                          }
+                        >
+                          Удалить пользователя и архив
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

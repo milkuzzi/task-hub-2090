@@ -16,6 +16,9 @@ import TaskForm from './TaskForm';
 
 const STATUSES: TaskStatus[] = ['in_progress', 'done', 'cancelled'];
 
+// Клиентский предел на размер вложения (бэкенд может иметь более строгий лимит).
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
 export default function TaskCardPage() {
   const { id } = useParams();
   const me = useAuthStore((s) => s.user);
@@ -25,6 +28,7 @@ export default function TaskCardPage() {
   const [editing, setEditing] = useState(false);
   const [reportText, setReportText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
   const [actionError, setActionError] = useState('');
 
   const { data: task, isLoading, isError } = useQuery({
@@ -103,12 +107,33 @@ export default function TaskCardPage() {
   const role =
     task.author.id === me?.id ? 'author' : task.assignee.id === me?.id ? 'assignee' : 'observer';
 
+  const handleStatusSelect = (next: TaskStatus) => {
+    if (next === task.status) return;
+    setActionError('');
+    // Перевод в «Отменена» необратим по смыслу — спрашиваем подтверждение.
+    if (next === 'cancelled') {
+      setPendingStatus(next);
+    } else {
+      statusMutation.mutate(next);
+    }
+  };
+
+  const handleFilePick = (file: File | undefined, mutate: (file: File) => void) => {
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      setActionError('Файл слишком большой. Максимальный размер — 25 МБ.');
+      return;
+    }
+    setActionError('');
+    mutate(file);
+  };
+
   return (
     <div className="panel">
       <div className="between">
-        <h2>
+        <h1>
           Задача №{task.seqNo} · ID {task.code}
-        </h2>
+        </h1>
         <div className="row">
           <StatusBadge status={task.status} />
           {isVisuallyOverdue(task) && <OverdueBadge />}
@@ -197,8 +222,8 @@ export default function TaskCardPage() {
       {actionError && <div className="form-error">{actionError}</div>}
 
       {role === 'author' && (
-        <div className="panel">
-          <div className="row between">
+        <section className="task-action-section">
+          <div className="task-action-header">
             <button className="btn" onClick={() => setEditing((v) => !v)}>
               {editing ? STR.cancel : STR.edit}
             </button>
@@ -221,14 +246,17 @@ export default function TaskCardPage() {
               onSubmit={(input: CreateTaskInput) => updateMutation.mutate(input)}
               busy={updateMutation.isPending}
               error={updateMutation.isError ? errorMessage(updateMutation.error) : ''}
+              surface="plain"
             />
           )}
 
           <div className="field">
-            <label>{STR.fStatus}</label>
+            <label htmlFor="task-status">{STR.fStatus}</label>
             <select
+              id="task-status"
               value={task.status}
-              onChange={(e) => statusMutation.mutate(e.target.value as TaskStatus)}
+              disabled={statusMutation.isPending}
+              onChange={(e) => handleStatusSelect(e.target.value as TaskStatus)}
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -239,25 +267,32 @@ export default function TaskCardPage() {
           </div>
 
           <div className="field">
-            <label>Прикрепить файл</label>
+            <label htmlFor="task-attachment">Прикрепить файл</label>
             <input
+              id="task-attachment"
               type="file"
+              disabled={attachTaskMutation.isPending}
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) attachTaskMutation.mutate(file);
+                handleFilePick(e.target.files?.[0], attachTaskMutation.mutate);
+                e.target.value = '';
               }}
             />
+            {attachTaskMutation.isPending && <span className="muted">Загрузка файла…</span>}
           </div>
-        </div>
+        </section>
       )}
 
       {role === 'assignee' && (
-        <div className="panel">
+        <section className="task-action-section">
           <div className="field">
-            <label>{STR.fReport}</label>
-            <textarea value={reportText} onChange={(e) => setReportText(e.target.value)} />
+            <label htmlFor="task-report-text">{STR.fReport}</label>
+            <textarea
+              id="task-report-text"
+              value={reportText}
+              onChange={(e) => setReportText(e.target.value)}
+            />
           </div>
-          <div className="row">
+          <div className="form-actions">
             <button
               className="btn"
               disabled={reportMutation.isPending}
@@ -274,16 +309,19 @@ export default function TaskCardPage() {
             </button>
           </div>
           <div className="field">
-            <label>Прикрепить файл к отчёту</label>
+            <label htmlFor="report-attachment">Прикрепить файл к отчёту</label>
             <input
+              id="report-attachment"
               type="file"
+              disabled={attachReportMutation.isPending}
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) attachReportMutation.mutate(file);
+                handleFilePick(e.target.files?.[0], attachReportMutation.mutate);
+                e.target.value = '';
               }}
             />
+            {attachReportMutation.isPending && <span className="muted">Загрузка файла…</span>}
           </div>
-        </div>
+        </section>
       )}
 
       {confirmDelete && (
@@ -296,6 +334,20 @@ export default function TaskCardPage() {
             deleteMutation.mutate();
           }}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {pendingStatus && (
+        <ConfirmDialog
+          message="Перевести задачу в статус «Отменена»?"
+          confirmLabel={STR.confirm}
+          danger
+          onConfirm={() => {
+            const next = pendingStatus;
+            setPendingStatus(null);
+            statusMutation.mutate(next);
+          }}
+          onCancel={() => setPendingStatus(null)}
         />
       )}
     </div>

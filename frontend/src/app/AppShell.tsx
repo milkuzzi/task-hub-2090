@@ -35,6 +35,9 @@ export function AppShell() {
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#main-content">
+        Перейти к содержимому
+      </a>
       <nav className="sidebar">
         <div className="brand">
           <div className="brand-logo">2090</div>
@@ -70,12 +73,12 @@ export function AppShell() {
           </NavLink>
         ))}
         {user?.isAdmin && <NavLink to="/admin">{STR.admin}</NavLink>}
-        <a onClick={logout} style={{ cursor: 'pointer' }}>
+        <button type="button" onClick={logout}>
           {STR.logout}
-        </a>
+        </button>
       </nav>
 
-      <main className="content">
+      <main className="content" id="main-content" tabIndex={-1}>
         <DeadlineCounter />
         <Outlet />
       </main>

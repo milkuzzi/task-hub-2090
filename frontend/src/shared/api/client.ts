@@ -35,7 +35,13 @@ export const api = {
     status?: string;
     sort?: string;
     order?: string;
-  }) => http.get<TaskListResponse>('/tasks', { params }).then((r) => r.data),
+    pageSize?: number;
+  }) => {
+    const { pageSize, ...rest } = params;
+    return http
+      .get<TaskListResponse>('/tasks', { params: { ...rest, page_size: pageSize ?? 500 } })
+      .then((r) => r.data);
+  },
   getTask: (id: string) => http.get<TaskDetail>(`/tasks/${id}`).then((r) => r.data),
   createTask: (input: CreateTaskInput) =>
     http.post<TaskDetail>('/tasks', input).then((r) => r.data),
@@ -60,18 +66,18 @@ export const api = {
     http
       .get<Blob>(`/tasks/${id}/attachments/${attId}/download`, { responseType: 'blob' })
       .then((r) => r.data),
-  exportUrl: (role: string, status?: string, sort?: string, order?: string) => {
-    const p = new URLSearchParams({ role, format: 'print' });
-    if (status) p.set('status', status);
-    if (sort) p.set('sort', sort);
-    if (order) p.set('order', order);
-    return `/api/v1/tasks/export?${p.toString()}`;
-  },
+  exportTasks: (role: string, status?: string, sort?: string, order?: string) =>
+    http
+      .get('/tasks/export', {
+        params: { role, format: 'print', status, sort, order },
+        responseType: 'blob',
+      })
+      .then((r) => r.data as Blob),
 
   // --- Admin ---
   listRegistry: (query?: string) =>
     http
-      .get<RegistryListResponse>('/admin/registry', { params: { query, pageSize: 500 } })
+      .get<RegistryListResponse>('/admin/registry', { params: { query, page_size: 500 } })
       .then((r) => r.data),
   createRegistry: (body: Partial<RegistryItem>) =>
     http.post<RegistryItem>('/admin/registry', body).then((r) => r.data),

@@ -28,7 +28,7 @@ export default function SearchPage() {
 
   return (
     <div className="panel">
-      <h2>{STR.search}</h2>
+      <h1>{STR.search}</h1>
       <form onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="search-code">{STR.search}</label>
@@ -36,6 +36,7 @@ export default function SearchPage() {
             id="search-code"
             value={code}
             inputMode="numeric"
+            pattern="[0-9]{6}"
             maxLength={6}
             onChange={(e) => setCode(e.target.value)}
           />

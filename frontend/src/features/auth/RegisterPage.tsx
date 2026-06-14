@@ -42,6 +42,7 @@ export default function RegisterPage() {
             <input
               id="register-email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -52,6 +53,7 @@ export default function RegisterPage() {
             <input
               id="register-password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
