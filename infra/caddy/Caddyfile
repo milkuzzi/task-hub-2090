@@ -16,9 +16,20 @@
 		-Server
 	}
 
-	# API → backend (тот же origin, без CORS)
+	# API → backend (тот же origin, без CORS).
+	# WebSocket (/api/v1/ws): Caddy проксирует Upgrade-запросы прозрачно, отдельный
+	# matcher не нужен. Для долгоживущих WS-соединений снимаем таймауты потоковой
+	# передачи у этого reverse_proxy (по умолчанию они уже отключены, но фиксируем
+	# явно, чтобы апгрейд чата/уведомлений не рвался прокси).
 	handle /api/* {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			transport http {
+				# 0 = без принудительного закрытия простаивающего соединения,
+				# что важно для idle WS между сообщениями чата.
+				read_timeout 0
+				write_timeout 0
+			}
+		}
 	}
 
 	# SPA: статика + fallback на index.html для клиентского роутинга

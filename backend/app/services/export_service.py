@@ -15,6 +15,7 @@ from app.api.deps import CurrentUser
 from app.core.clock import now, to_org_tz
 from app.domain.enums import STATUS_LABELS_RU, DueMode, TaskStatus
 from app.domain.overdue import is_overdue
+from app.domain.status import is_open
 from app.services import task_service
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -40,7 +41,7 @@ def _due_display(task) -> str:
 def _effective_overdue(task) -> bool:
     if task.is_overdue:
         return True
-    if task.status == TaskStatus.IN_PROGRESS:
+    if is_open(task.status):
         return is_overdue(now(), task.due_at, task.due_mode)
     return False
 
@@ -73,7 +74,7 @@ async def render_print(
                 "title": t.title,
                 "description": t.description,
                 "due_display": _due_display(t),
-                "assignee": t.assignee.display_name,
+                "assignee": ", ".join(a.user.display_name for a in t.assignees),
                 "author": t.author.display_name,
                 "observers": ", ".join(o.display_name for o in t.observers),
                 "status_label": STATUS_LABELS_RU[t.status],

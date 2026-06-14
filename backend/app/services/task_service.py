@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, TaskContext
@@ -19,6 +20,8 @@ from app.domain.roles import role_of
 from app.models import Task, TaskAttachment, TaskObserver, User
 from app.repositories import registry_repo, tasks_repo, users_repo
 from app.schemas.tasks import TaskCreateIn, TaskUpdateIn
+from app.services import attachment_service, notification_center
+from app.storage.base import get_storage
 
 _ROLE_MAP = {
     "author": TaskRole.AUTHOR,
@@ -40,13 +43,23 @@ def _validate_link(url: str) -> str:
     return url
 
 
-async def _require_active_listed(db: AsyncSession, user_id: uuid.UUID, field: str) -> User:
-    user = await users_repo.get_active_by_id(db, user_id)
-    if user is None or not await registry_repo.is_listed(db, user.email):
+async def _resolve_assignees(
+    db: AsyncSession, assignee_ids: Sequence[uuid.UUID]
+) -> list[User]:
+    users = await users_repo.get_active_by_ids(db, assignee_ids)
+    found = {u.id for u in users}
+    missing = [aid for aid in assignee_ids if aid not in found]
+    if missing:
         raise errors.validation_error(
-            [{"field": field, "message": "Пользователь не найден или не имеет доступа."}]
+            [{"field": "assigneeIds", "message": "Исполнитель не найден или не имеет доступа."}]
         )
-    return user
+    for u in users:
+        if not await registry_repo.is_listed(db, u.email):
+            raise errors.validation_error(
+                [{"field": "assigneeIds", "message": "Исполнитель не имеет доступа к сервису."}]
+            )
+    by_id = {u.id: u for u in users}
+    return [by_id[aid] for aid in assignee_ids if aid in by_id]
 
 
 async def _resolve_observers(
@@ -69,29 +82,52 @@ async def _resolve_observers(
     return [by_id[oid] for oid in observer_ids if oid in by_id]
 
 
-async def create_task(db: AsyncSession, current: CurrentUser, data: TaskCreateIn) -> Task:
+async def create_task(
+    db: AsyncSession,
+    current: CurrentUser,
+    data: TaskCreateIn,
+    *,
+    files: Sequence[UploadFile] | None = None,
+) -> Task:
     title = invariants.validate_title(data.title)
-    assignee_id = invariants.validate_assignee(data.assignee_id)
+    assignee_ids = invariants.validate_assignees(data.assignee_ids)
     observer_ids = invariants.validate_observers(
-        data.observer_ids, assignee_id=assignee_id, author_id=current.id
+        data.observer_ids, assignee_ids=assignee_ids, author_id=current.id
     )
-    await _require_active_listed(db, assignee_id, "assignee_id")
+    await _resolve_assignees(db, assignee_ids)
     obs_users = await _resolve_observers(db, observer_ids)
 
-    task = await tasks_repo.create_task(
-        db,
-        title=title,
-        description=data.description,
-        due_at=_normalize_due(data.due_at, data.due_mode),
-        due_mode=data.due_mode,
-        author_id=current.id,
-        assignee_id=assignee_id,
-    )
-    for u in obs_users:
-        db.add(TaskObserver(task_id=task.id, user_id=u.id, display_name=u.display_name))
-    for url in data.links:
-        db.add(TaskAttachment(task_id=task.id, kind=AttachKind.URL, url=_validate_link(url)))
-    await db.commit()
+    # Файлы читаем и проверяем ДО любых записей: при нарушении лимитов
+    # (415/409/413) задача не создаётся, файлы в сторадж не пишутся (Req 1.3).
+    prepared_files = await attachment_service.prepare_task_files(files or [])
+
+    # Создание задачи + связи + ссылки + файлы — одна транзакция. Файлы пишутся
+    # в сторадж; при сбое транзакции — удаляются (компенсация, Req 1.5), чтобы не
+    # осталось ни «осиротевших» файлов, ни частичной задачи.
+    written_keys: list[str] = []
+    try:
+        task = await tasks_repo.create_task(
+            db,
+            title=title,
+            description=data.description,
+            due_at=_normalize_due(data.due_at, data.due_mode),
+            due_mode=data.due_mode,
+            author_id=current.id,
+            assignee_ids=assignee_ids,
+        )
+        for u in obs_users:
+            db.add(TaskObserver(task_id=task.id, user_id=u.id, display_name=u.display_name))
+        for url in data.links:
+            db.add(TaskAttachment(task_id=task.id, kind=AttachKind.URL, url=_validate_link(url)))
+        written_keys = attachment_service.persist_prepared_files(
+            db, task.id, current.id, prepared_files
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        if written_keys:
+            get_storage().delete_many(written_keys)
+        raise
     return await tasks_repo.get_full(db, task.id)
 
 
@@ -105,7 +141,7 @@ def _on_due_changed(task: Task) -> None:
 
 
 async def update_task(db: AsyncSession, ctx: TaskContext, data: TaskUpdateIn) -> Task:
-    permissions.authorize(Action.EDIT_FIELDS, ctx.role)
+    permissions.authorize(Action.EDIT_FIELDS, ctx.role, is_admin=ctx.user.is_admin)
     task = ctx.task
 
     if data.title is not None:
@@ -127,15 +163,17 @@ async def update_task(db: AsyncSession, ctx: TaskContext, data: TaskUpdateIn) ->
         task.due_mode = new_due_mode
         _on_due_changed(task)
 
-    if data.assignee_id is not None:
-        invariants.validate_assignee(data.assignee_id)
-        new_assignee = await _require_active_listed(db, data.assignee_id, "assignee_id")
-        task.assignee = new_assignee  # обновляем и FK, и relationship (иначе кэш устаревает)
+    # Новый набор исполнителей (если передан) учитывается и при проверке наблюдателей.
+    effective_assignee_ids = list(task.assignee_ids)
+    if data.assignee_ids is not None:
+        effective_assignee_ids = invariants.validate_assignees(data.assignee_ids)
+        await _resolve_assignees(db, effective_assignee_ids)
+        await tasks_repo.set_assignees(db, task, effective_assignee_ids)
         task.needs_reassignment = False  # переназначение снимает флаг
 
     if data.observer_ids is not None:
         observer_ids = invariants.validate_observers(
-            data.observer_ids, assignee_id=task.assignee_id, author_id=task.author_id
+            data.observer_ids, assignee_ids=effective_assignee_ids, author_id=task.author_id
         )
         obs_users = await _resolve_observers(db, observer_ids)
         task.observers.clear()
@@ -148,15 +186,52 @@ async def update_task(db: AsyncSession, ctx: TaskContext, data: TaskUpdateIn) ->
 
 
 async def change_status(db: AsyncSession, ctx: TaskContext, new_status: TaskStatus) -> Task:
-    permissions.authorize(Action.CHANGE_STATUS, ctx.role)
+    """Отмена/переоткрытие постановщиком или администратором (§5).
+
+    Перевод в проверку/приёмку идёт отдельными сценариями (submit_review,
+    review_decision) — здесь допустимы только cancel и reopen.
+    """
+    permissions.authorize(Action.CHANGE_STATUS, ctx.role, is_admin=ctx.user.is_admin)
+    if new_status not in (TaskStatus.CANCELLED, TaskStatus.IN_PROGRESS):
+        raise errors.status_conflict()
     status_domain.validate_transition(ctx.task.status, new_status)
     ctx.task.status = new_status  # флаг is_overdue не трогаем (§5)
     await db.commit()
     return await tasks_repo.get_full(db, ctx.task.id)
 
 
+async def submit_review(db: AsyncSession, ctx: TaskContext) -> Task:
+    """Исполнитель отправляет работу на проверку → under_review (§5, Req 5.2)."""
+    # SUBMIT_REVIEW не имеет admin-override: только сам исполнитель (Req 5.4).
+    permissions.authorize(Action.SUBMIT_REVIEW, ctx.role, is_admin=ctx.user.is_admin)
+    status_domain.validate_transition(ctx.task.status, TaskStatus.UNDER_REVIEW)
+    ctx.task.status = TaskStatus.UNDER_REVIEW
+    await db.commit()
+    return await tasks_repo.get_full(db, ctx.task.id)
+
+
+async def review_decision(db: AsyncSession, ctx: TaskContext, decision: str) -> Task:
+    """Приёмщик (наблюдатель/админ) решает: accept→done | rework (§5, Req 5.3).
+
+    При возврате на доработку создаём on-site уведомления исполнителям и шлём их
+    по WS (Req 6) — после коммита.
+    """
+    permissions.authorize(Action.DECIDE_REVIEW, ctx.role, is_admin=ctx.user.is_admin)
+    target = TaskStatus.DONE if decision == "accept" else TaskStatus.REWORK
+    status_domain.validate_transition(ctx.task.status, target)
+    ctx.task.status = target
+
+    notifs: list = []
+    if target == TaskStatus.REWORK:
+        notifs = await notification_center.build_rework_notifications(db, ctx.task)
+    await db.commit()
+    if notifs:
+        await notification_center.push_notifications(notifs)
+    return await tasks_repo.get_full(db, ctx.task.id)
+
+
 async def delete_task(db: AsyncSession, ctx: TaskContext) -> None:
-    permissions.authorize(Action.DELETE_TASK, ctx.role)
+    permissions.authorize(Action.DELETE_TASK, ctx.role, is_admin=ctx.user.is_admin)
     from app.storage.base import get_storage
 
     task_id = ctx.task.id
@@ -175,10 +250,10 @@ async def search_by_code(db: AsyncSession, current: CurrentUser, code: int) -> T
     role = role_of(
         current.id,
         author_id=task.author_id,
-        assignee_id=task.assignee_id,
+        assignee_ids=task.assignee_ids,
         observer_ids=task.observer_ids,
     )
-    if role == TaskRole.NONE:
+    if role == TaskRole.NONE and not current.is_admin:
         raise errors.task_not_found()
     return task
 

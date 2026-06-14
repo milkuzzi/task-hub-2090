@@ -13,15 +13,17 @@ class TaskRole(StrEnum):
     """Роль пользователя ПО КОНКРЕТНОЙ задаче (вычисляется на лету, §4)."""
 
     AUTHOR = "author"  # постановщик
-    ASSIGNEE = "assignee"  # исполнитель (ровно один)
+    ASSIGNEE = "assignee"  # исполнитель (один или несколько)
     OBSERVER = "observer"  # наблюдатель (до 5)
     NONE = "none"  # нет доступа
 
 
 class TaskStatus(StrEnum):
-    """Статус задачи — управляется постановщиком (§5)."""
+    """Статус задачи — статусный поток на основе проверки (§5, task-collaboration)."""
 
     IN_PROGRESS = "in_progress"  # В работе (стартовое)
+    UNDER_REVIEW = "under_review"  # На проверке (исполнитель отправил на приёмку)
+    REWORK = "rework"  # На доработку (приёмщик вернул)
     DONE = "done"  # Выполнена
     CANCELLED = "cancelled"  # Отменена
 
@@ -67,6 +69,9 @@ class Action(StrEnum):
     CHANGE_STATUS = "change_status"
     ADD_REPORT = "add_report"
     MARK_READY = "mark_ready"
+    SUBMIT_REVIEW = "submit_review"  # исполнитель: «готово к проверке» → under_review
+    DECIDE_REVIEW = "decide_review"  # приёмщик: «выполнено»/«на доработку»
+    POST_MESSAGE = "post_message"  # сообщение в чат задачи (author/assignee/observer)
     ADD_ATTACHMENT_TASK = "add_attachment_task"
     EXPORT = "export"
 
@@ -74,6 +79,8 @@ class Action(StrEnum):
 # Человекочитаемые русские метки статуса для печати/писем (канон — коды выше).
 STATUS_LABELS_RU: dict[TaskStatus, str] = {
     TaskStatus.IN_PROGRESS: "В работе",
+    TaskStatus.UNDER_REVIEW: "На проверке",
+    TaskStatus.REWORK: "На доработку",
     TaskStatus.DONE: "Выполнена",
     TaskStatus.CANCELLED: "Отменена",
 }

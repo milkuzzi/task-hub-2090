@@ -88,10 +88,11 @@ async def get_task_context(
     role = role_of(
         user.id,
         author_id=task.author_id,
-        assignee_id=task.assignee_id,
+        assignee_ids=task.assignee_ids,
         observer_ids=task.observer_ids,
     )
-    if role == TaskRole.NONE:
-        # 404, а не 403 — не раскрываем существование чужой задачи (§13.5.2)
+    if role == TaskRole.NONE and not user.is_admin:
+        # 404, а не 403 — не раскрываем существование чужой задачи (§13.5.2).
+        # Администратор имеет доступ к любой задаче через override.
         raise errors.task_not_found()
     return TaskContext(task=task, user=user, role=role)

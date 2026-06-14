@@ -16,12 +16,17 @@ def role_of(
     user_id: UUID,
     *,
     author_id: UUID,
-    assignee_id: UUID,
+    assignee_ids: Iterable[UUID],
     observer_ids: Iterable[UUID],
 ) -> TaskRole:
+    """Роль по задаче. Приоритет при пересечении: AUTHOR > ASSIGNEE > OBSERVER.
+
+    Постановщик может быть и одним из исполнителей — для прав он считается
+    AUTHOR (а уведомления исполнителя получает отдельно на уровне сервиса).
+    """
     if author_id == user_id:
         return TaskRole.AUTHOR
-    if assignee_id == user_id:
+    if user_id in set(assignee_ids):
         return TaskRole.ASSIGNEE
     if user_id in set(observer_ids):
         return TaskRole.OBSERVER

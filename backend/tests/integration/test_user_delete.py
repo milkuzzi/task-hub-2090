@@ -53,8 +53,8 @@ async def test_delete_user_cascades_and_flags(client, db):
     fcard = await client.get(f"/api/v1/tasks/{foreign.id}", headers=auth_header(other))
     assert fcard.status_code == 200
     assert fcard.json()["needsReassignment"] is True
-    assert fcard.json()["assignee"]["displayName"] == "Пользователь удалён"
-    assert fcard.json()["assignee"]["isDeleted"] is True
+    assert fcard.json()["assignees"][0]["displayName"] == "Пользователь удалён"
+    assert fcard.json()["assignees"][0]["isDeleted"] is True
 
     # участие наблюдателя обезличено
     ocard = await client.get(f"/api/v1/tasks/{observed.id}", headers=auth_header(other))
@@ -72,9 +72,9 @@ async def test_reassignment_clears_flag(client, db):
     # автор переназначает исполнителя → флаг снимается
     upd = await client.put(
         f"/api/v1/tasks/{foreign.id}",
-        json={"assigneeId": str(replacement.id)},
+        json={"assigneeIds": [str(replacement.id)]},
         headers=auth_header(author),
     )
     assert upd.status_code == 200
     assert upd.json()["needsReassignment"] is False
-    assert upd.json()["assignee"]["displayName"] == "newasg"
+    assert upd.json()["assignees"][0]["displayName"] == "newasg"

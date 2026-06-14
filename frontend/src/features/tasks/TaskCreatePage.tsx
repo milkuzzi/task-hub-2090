@@ -11,7 +11,8 @@ export default function TaskCreatePage() {
   const qc = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (input: CreateTaskInput) => api.createTask(input),
+    mutationFn: ({ input, files }: { input: CreateTaskInput; files: File[] }) =>
+      api.createTask(input, files),
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['tasks'] });
       navigate('/tasks/' + created.id);
@@ -23,7 +24,8 @@ export default function TaskCreatePage() {
       <h1>{STR.addTask}</h1>
       <TaskForm
         submitLabel={STR.save}
-        onSubmit={(input) => mutation.mutate(input)}
+        allowAttachments
+        onSubmit={(input, files) => mutation.mutate({ input, files })}
         busy={mutation.isPending}
         error={mutation.isError ? errorMessage(mutation.error) : ''}
       />

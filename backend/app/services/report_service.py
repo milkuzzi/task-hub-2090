@@ -23,7 +23,7 @@ async def _get_or_create_report(db: AsyncSession, task: Task, user_id) -> TaskRe
 
 
 async def add_report(db: AsyncSession, ctx: TaskContext, *, text: str | None) -> Task:
-    permissions.authorize(Action.ADD_REPORT, ctx.role)
+    permissions.authorize(Action.ADD_REPORT, ctx.role, is_admin=ctx.user.is_admin)
     if ctx.task.status == TaskStatus.CANCELLED:
         raise errors.status_conflict()  # отчёт по отменённой задаче не принимается
     report = await _get_or_create_report(db, ctx.task, ctx.user.id)
@@ -35,7 +35,7 @@ async def add_report(db: AsyncSession, ctx: TaskContext, *, text: str | None) ->
 
 
 async def mark_ready(db: AsyncSession, ctx: TaskContext, *, text: str | None) -> TaskReport:
-    permissions.authorize(Action.MARK_READY, ctx.role)
+    permissions.authorize(Action.MARK_READY, ctx.role, is_admin=ctx.user.is_admin)
     if ctx.task.status != TaskStatus.IN_PROGRESS:
         raise errors.status_conflict()  # отметка готовности — только по открытой задаче
     report = await _get_or_create_report(db, ctx.task, ctx.user.id)

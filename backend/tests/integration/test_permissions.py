@@ -94,8 +94,8 @@ async def test_author_full_crud_and_ready_indicator(client, db):
     card = await client.get(f"/api/v1/tasks/{tid}", headers=ha)
     assert card.json()["assigneeMarkedReady"] is True
 
-    st = await client.patch(f"/api/v1/tasks/{tid}/status", json={"status": "done"}, headers=ha)
-    assert st.status_code == 200 and st.json()["status"] == "done"
+    st = await client.patch(f"/api/v1/tasks/{tid}/status", json={"status": "cancelled"}, headers=ha)
+    assert st.status_code == 200 and st.json()["status"] == "cancelled"
     assert (await client.delete(f"/api/v1/tasks/{tid}", headers=ha)).status_code == 200
 
 

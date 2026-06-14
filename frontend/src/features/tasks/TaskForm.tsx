@@ -2,17 +2,23 @@ import { useState } from 'react';
 import type { CreateTaskInput, DueMode } from '@/shared/types';
 import { STR } from '@/shared/strings';
 import { toInputValue, fromInputValue } from '@/shared/lib/date';
-import { AssigneePicker } from './UserPicker';
+import { AssigneesPicker } from './UserPicker';
 import ObserversPicker from './UserPicker';
 
 interface TaskFormProps {
   initial?: Partial<CreateTaskInput> & { title?: string };
   submitLabel: string;
-  onSubmit: (input: CreateTaskInput) => void;
+  onSubmit: (input: CreateTaskInput, files: File[]) => void;
   busy?: boolean;
   error?: string;
   surface?: 'panel' | 'plain';
+  // В режиме создания (§6) разрешаем прикреплять файлы прямо в форме; в режиме
+  // редактирования вложения добавляются на карточке задачи (контракт не меняем).
+  allowAttachments?: boolean;
 }
+
+// Клиентский предел на размер вложения (бэкенд может иметь более строгий лимит).
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 export default function TaskForm({
   initial,
@@ -21,6 +27,7 @@ export default function TaskForm({
   busy,
   error,
   surface = 'panel',
+  allowAttachments = false,
 }: TaskFormProps) {
   const [title, setTitle] = useState<string>(initial?.title ?? '');
   const [description, setDescription] = useState<string>(initial?.description ?? '');
@@ -28,9 +35,10 @@ export default function TaskForm({
   const [deadline, setDeadline] = useState<string>(
     toInputValue(initial?.dueAt, (initial?.dueMode ?? 'datetime') === 'datetime'),
   );
-  const [assigneeId, setAssigneeId] = useState<string>(initial?.assigneeId ?? '');
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(initial?.assigneeIds ?? []);
   const [observerIds, setObserverIds] = useState<string[]>(initial?.observerIds ?? []);
   const [links, setLinks] = useState<string[]>(initial?.links ?? []);
+  const [files, setFiles] = useState<File[]>([]);
   const [localError, setLocalError] = useState<string>('');
 
   const changeMode = (mode: DueMode) => {
@@ -49,14 +57,29 @@ export default function TaskForm({
   };
   const removeLink = (idx: number) => setLinks(links.filter((_, i) => i !== idx));
 
+  const addFiles = (picked: FileList | null) => {
+    if (!picked || picked.length === 0) return;
+    const next: File[] = [];
+    for (const f of Array.from(picked)) {
+      if (f.size > MAX_FILE_SIZE) {
+        setLocalError('Файл слишком большой. Максимальный размер — 25 МБ.');
+        return;
+      }
+      next.push(f);
+    }
+    setLocalError('');
+    setFiles((prev) => [...prev, ...next]);
+  };
+  const removeFile = (idx: number) => setFiles(files.filter((_, i) => i !== idx));
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setLocalError('Укажите название задачи');
       return;
     }
-    if (!assigneeId) {
-      setLocalError('Выберите исполнителя');
+    if (assigneeIds.length === 0) {
+      setLocalError('Выберите хотя бы одного исполнителя');
       return;
     }
     if (!deadline) {
@@ -69,11 +92,11 @@ export default function TaskForm({
       description: description || null,
       dueAt: fromInputValue(deadline, dueMode === 'datetime'),
       dueMode,
-      assigneeId,
+      assigneeIds,
       observerIds,
       links: links.filter((l) => l.trim().length > 0),
     };
-    onSubmit(input);
+    onSubmit(input, allowAttachments ? files : []);
   };
 
   return (
@@ -118,8 +141,12 @@ export default function TaskForm({
       </div>
 
       <div className="field">
-        <label htmlFor="task-assignee">{STR.fAssignee}</label>
-        <AssigneePicker id="task-assignee" value={assigneeId} onChange={setAssigneeId} />
+        <label id="task-assignees-label">{STR.fAssignees}</label>
+        <AssigneesPicker
+          labelledBy="task-assignees-label"
+          value={assigneeIds}
+          onChange={setAssigneeIds}
+        />
       </div>
 
       <div className="field">
@@ -152,6 +179,40 @@ export default function TaskForm({
           + ссылка
         </button>
       </div>
+
+      {allowAttachments && (
+        <div className="field">
+          <label htmlFor="task-files">Вложения</label>
+          <input
+            id="task-files"
+            type="file"
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          {files.length > 0 && (
+            <ul className="attach-list" data-testid="pending-files">
+              {files.map((f, idx) => (
+                <li key={`${f.name}-${idx}`}>
+                  <span>
+                    {f.name} ({Math.ceil(f.size / 1024)} КБ)
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    aria-label={`Удалить вложение ${f.name}`}
+                    onClick={() => removeFile(idx)}
+                  >
+                    {STR.delete}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {localError && <div className="form-error">{localError}</div>}
       {error && <div className="form-error">{error}</div>}

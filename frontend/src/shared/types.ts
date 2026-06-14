@@ -1,7 +1,7 @@
 // Контракт API (camelCase) — зеркалит DTO бэкенда (§13.6.4).
 
 export type TaskRole = 'author' | 'assignee' | 'observer';
-export type TaskStatus = 'in_progress' | 'done' | 'cancelled';
+export type TaskStatus = 'in_progress' | 'under_review' | 'rework' | 'done' | 'cancelled';
 export type DueMode = 'datetime' | 'date';
 export type AttachKind = 'file' | 'url';
 
@@ -17,6 +17,21 @@ export interface User {
   email: string;
   isAdmin: boolean;
   displayName: string;
+}
+
+// --- Профиль пользователя (§8) ---
+export interface Profile {
+  id: string;
+  email: string;
+  displayName: string;
+  isAdmin: boolean;
+  maxContact: string | null;
+  hasAvatar: boolean;
+}
+
+export interface ProfileUpdateInput {
+  displayName?: string;
+  maxContact?: string;
 }
 
 export interface Attachment {
@@ -47,7 +62,7 @@ export interface TaskListItem {
   status: TaskStatus;
   isOverdue: boolean;
   needsReassignment: boolean;
-  assignee: UserRef;
+  assignees: UserRef[];
   author: UserRef;
   observers: UserRef[];
   assigneeMarkedReady: boolean;
@@ -111,7 +126,7 @@ export interface CreateTaskInput {
   description?: string | null;
   dueAt: string;
   dueMode: DueMode;
-  assigneeId: string;
+  assigneeIds: string[];
   observerIds: string[];
   links?: string[];
 }
@@ -121,6 +136,55 @@ export interface UpdateTaskInput {
   description?: string | null;
   dueAt?: string;
   dueMode?: DueMode;
-  assigneeId?: string;
+  assigneeIds?: string[];
   observerIds?: string[];
 }
+
+export type ReviewDecision = 'accept' | 'rework';
+
+// --- Чат задачи (§4) ---
+export interface TaskMessage {
+  id: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface MessageListResponse {
+  items: TaskMessage[];
+  nextAfter: string | null;
+}
+
+// --- On-site уведомления (§6) ---
+export type NotificationKind = 'chat_message' | 'task_rework';
+
+export interface Notification {
+  id: string;
+  kind: NotificationKind | string;
+  text: string;
+  taskId: string | null;
+  messageId: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  items: Notification[];
+  unread: number;
+}
+
+export interface UnreadCountResponse {
+  unread: number;
+}
+
+export interface MarkReadResponse {
+  marked: number;
+  unread: number;
+}
+
+// --- WebSocket: серверные сообщения ---
+export type RealtimeMessage =
+  | { type: 'ready' }
+  | { type: 'chat'; taskId: string; message: TaskMessage }
+  | { type: 'notification'; notification: Notification };

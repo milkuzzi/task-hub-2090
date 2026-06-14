@@ -13,6 +13,16 @@ describe('Бейджи', () => {
     expect(screen.getByText('Выполнена')).toBeInTheDocument();
   });
 
+  it('StatusBadge для under_review', () => {
+    render(<StatusBadge status="under_review" />);
+    expect(screen.getByText('На проверке')).toBeInTheDocument();
+  });
+
+  it('StatusBadge для rework', () => {
+    render(<StatusBadge status="rework" />);
+    expect(screen.getByText('На доработку')).toBeInTheDocument();
+  });
+
   it('OverdueBadge показывает «Просрочена»', () => {
     render(<OverdueBadge />);
     expect(screen.getByText('Просрочена')).toBeInTheDocument();

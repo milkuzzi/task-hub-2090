@@ -14,9 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.domain.enums import DueMode, TaskRole, TaskStatus
-from app.models import Task, TaskObserver, User
+from app.models import Task, TaskAssignee, TaskObserver, User
 
 _CODE6_RETRIES = 10
+_CLOSED_STATUSES = (TaskStatus.DONE, TaskStatus.CANCELLED)
 
 
 async def next_task_no(db: AsyncSession) -> int:
@@ -40,9 +41,12 @@ async def create_task(
     due_at: datetime,
     due_mode: DueMode,
     author_id: uuid.UUID,
-    assignee_id: uuid.UUID,
+    assignee_ids: Sequence[uuid.UUID],
 ) -> Task:
-    """Создаёт задачу: сквозной номер + уникальный 6-значный код (повтор при коллизии)."""
+    """Создаёт задачу: сквозной номер + уникальный 6-значный код (повтор при коллизии).
+
+    Исполнители записываются в `task_assignees` сразу после вставки задачи.
+    """
     task_no = await next_task_no(db)
     for _ in range(_CODE6_RETRIES):
         code6 = secrets.randbelow(900_000) + 100_000  # 100000..999999
@@ -56,17 +60,30 @@ async def create_task(
             due_at=due_at,
             due_mode=due_mode,
             author_id=author_id,
-            assignee_id=assignee_id,
         )
         db.add(task)
         try:
             async with db.begin_nested():  # savepoint: гонку закрывает UNIQUE(code6)
                 await db.flush()
+            for uid in assignee_ids:
+                db.add(TaskAssignee(task_id=task.id, user_id=uid))
+            await db.flush()
             return task
         except IntegrityError:
             db.expunge(task)
             continue
     raise RuntimeError("CODE6_EXHAUSTED")
+
+
+async def set_assignees(
+    db: AsyncSession, task: Task, assignee_ids: Sequence[uuid.UUID]
+) -> None:
+    """Полностью заменяет набор исполнителей задачи (через relationship)."""
+    task.assignees.clear()
+    await db.flush()
+    for uid in assignee_ids:
+        task.assignees.append(TaskAssignee(user_id=uid))
+    await db.flush()
 
 
 async def get_full(db: AsyncSession, task_id: uuid.UUID) -> Task | None:
@@ -84,7 +101,9 @@ def _apply_role_filter(stmt, role: TaskRole, user_id: uuid.UUID):
     if role == TaskRole.AUTHOR:
         return stmt.where(Task.author_id == user_id)
     if role == TaskRole.ASSIGNEE:
-        return stmt.where(Task.assignee_id == user_id)
+        return stmt.join(TaskAssignee, TaskAssignee.task_id == Task.id).where(
+            TaskAssignee.user_id == user_id
+        )
     if role == TaskRole.OBSERVER:
         return stmt.join(TaskObserver, TaskObserver.task_id == Task.id).where(
             TaskObserver.user_id == user_id
@@ -126,16 +145,28 @@ async def list_tasks(
     if sort in _SORT_COLUMNS:
         col = _SORT_COLUMNS[sort]
         base = base.order_by(col.desc() if desc else col.asc(), Task.due_at.asc())
-    elif sort in ("assignee", "author"):
+    elif sort == "author":
         u = aliased(User)
-        join_col = Task.assignee_id if sort == "assignee" else Task.author_id
-        base = base.join(u, u.id == join_col).order_by(
+        base = base.join(u, u.id == Task.author_id).order_by(
             u.display_name.desc() if desc else u.display_name.asc(), Task.due_at.asc()
+        )
+    elif sort == "assignee":
+        # У задачи несколько исполнителей — сортируем по «первому» (минимальному)
+        # имени через скалярный подзапрос, чтобы не плодить строки в выборке.
+        first_assignee = (
+            select(func.min(User.display_name))
+            .select_from(TaskAssignee)
+            .join(User, User.id == TaskAssignee.user_id)
+            .where(TaskAssignee.task_id == Task.id)
+            .scalar_subquery()
+        )
+        base = base.order_by(
+            first_assignee.desc() if desc else first_assignee.asc(), Task.due_at.asc()
         )
     else:
         # по умолчанию: открытые выше закрытых, затем ближайший срок выше (§8)
         base = base.order_by(
-            (Task.status == TaskStatus.IN_PROGRESS).desc(), Task.due_at.asc()
+            Task.status.notin_(_CLOSED_STATUSES).desc(), Task.due_at.asc()
         )
 
     base = base.offset((page - 1) * page_size).limit(page_size)
@@ -188,10 +219,19 @@ async def delete_authored_tasks(db: AsyncSession, author_id: uuid.UUID) -> int:
 async def flag_foreign_for_reassignment(
     db: AsyncSession, assignee_id: uuid.UUID
 ) -> int:
-    """Чужие задачи, где удаляемый — исполнитель, помечаем needs_reassignment (§13.5.4)."""
+    """Чужие задачи, где удаляемый — исполнитель, помечаем needs_reassignment (§13.5.4).
+
+    Мульти-исполнитель: задача попадает под флаг, если пользователь входит в
+    `task_assignees` и не является постановщиком; прочие исполнители сохраняются.
+    """
+    foreign_ids = (
+        select(TaskAssignee.task_id)
+        .join(Task, Task.id == TaskAssignee.task_id)
+        .where(TaskAssignee.user_id == assignee_id, Task.author_id != assignee_id)
+    )
     res = await db.execute(
         update(Task)
-        .where(Task.assignee_id == assignee_id, Task.author_id != assignee_id)
+        .where(Task.id.in_(foreign_ids))
         .values(needs_reassignment=True)
         .returning(Task.id)
     )
@@ -216,7 +256,7 @@ async def iter_active_tasks_for_notifications(
     stmt = select(Task)
     if recent_since is not None:
         stmt = stmt.where(
-            or_(Task.status == TaskStatus.IN_PROGRESS, Task.created_at >= recent_since)
+            or_(Task.status.notin_(_CLOSED_STATUSES), Task.created_at >= recent_since)
         )
     stmt = stmt.order_by(Task.task_no.asc())
     res = await db.execute(stmt)

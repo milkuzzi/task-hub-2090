@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import admin, auth, tasks, users
+from app.api.routers import admin, auth, notifications, tasks, users, ws
 from app.api.routes import API_PREFIX
 from app.core import errors
 from app.core.config import settings
@@ -145,6 +145,10 @@ app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(tasks.router, prefix=API_PREFIX)
+app.include_router(notifications.router, prefix=API_PREFIX)
+# WebSocket-маршрут также под общим API-префиксом (/api/v1/ws) — Caddy проксирует
+# upgrade на backend по тому же `/api/*`-матчу.
+app.include_router(ws.router, prefix=API_PREFIX)
 
 
 @app.get(f"{API_PREFIX}/health", tags=["health"])

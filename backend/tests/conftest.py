@@ -97,3 +97,20 @@ def fake_channels():
 def _reset_clock():
     yield
     clock.set_now_override(None)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _dispose_global_engine():
+    """Сбрасываем пул глобального движка между тестами.
+
+    Фоновые задачи (например, notify_assignment) используют глобальный
+    `SessionFactory`, минуя override `get_db`. У pytest-asyncio каждый тест
+    выполняется в собственном event loop, поэтому соединение из пула,
+    созданное в прошлом тесте, при повторном использовании даёт ошибку
+    «attached to a different loop». Диспоуз после каждого теста гарантирует
+    свежие соединения в текущем loop.
+    """
+    yield
+    from app.db import session as _session
+
+    await _session.engine.dispose()

@@ -1,24 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
-import { STR, STATUS_LABEL } from '@/shared/strings';
+import { STR } from '@/shared/strings';
 import { errorMessage } from '@/shared/api/http';
 import { formatDeadline } from '@/shared/lib/date';
 import { isVisuallyOverdue } from '@/shared/lib/overdue';
 import { useAuthStore } from '@/shared/auth/store';
-import type { CreateTaskInput, TaskStatus, UpdateTaskInput } from '@/shared/types';
+import type { CreateTaskInput, ReviewDecision, TaskStatus, UpdateTaskInput } from '@/shared/types';
 import { StatusBadge, OverdueBadge, ReadyBadge, ReassignBadge } from '@/shared/ui/Badge';
 import { ConfirmDialog } from '@/shared/ui/Modal';
 import { Spinner, EmptyState } from '@/shared/ui/Spinner';
 import { AttachmentLink } from '@/shared/ui/AttachmentLink';
 import TaskForm from './TaskForm';
 import DeadlineProgress from './DeadlineProgress';
-
-const STATUSES: TaskStatus[] = ['in_progress', 'done', 'cancelled'];
+import TaskChat from './TaskChat';
 
 // Клиентский предел на размер вложения (бэкенд может иметь более строгий лимит).
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+function isClosed(status: TaskStatus): boolean {
+  return status === 'done' || status === 'cancelled';
+}
 
 export default function TaskCardPage() {
   const { id } = useParams();
@@ -29,7 +32,7 @@ export default function TaskCardPage() {
   const [editing, setEditing] = useState(false);
   const [reportText, setReportText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const { data: task, isLoading, isError } = useQuery({
@@ -37,10 +40,26 @@ export default function TaskCardPage() {
     queryFn: () => api.getTask(id!),
   });
 
+  // При открытии карточки помечаем связанные с задачей уведомления прочитанными
+  // (явный вызов с фронта — чище, чем сайд-эффект в GET карточки на бэкенде).
+  useEffect(() => {
+    if (!id) return;
+    api
+      .markReadForTask(id)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['notifications'] });
+      })
+      .catch(() => {
+        /* не критично для отображения задачи */
+      });
+  }, [id, qc]);
+
   const invalidateTask = () => {
     qc.invalidateQueries({ queryKey: ['task', id] });
     qc.invalidateQueries({ queryKey: ['tasks'] });
   };
+
+  const onError = (err: unknown) => setActionError(errorMessage(err));
 
   const updateMutation = useMutation({
     mutationFn: (input: UpdateTaskInput) => api.updateTask(id!, input),
@@ -49,13 +68,25 @@ export default function TaskCardPage() {
       setActionError('');
       invalidateTask();
     },
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
   });
 
   const statusMutation = useMutation({
     mutationFn: (status: TaskStatus) => api.changeStatus(id!, status),
     onSuccess: invalidateTask,
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: () => api.submitReview(id!),
+    onSuccess: invalidateTask,
+    onError,
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: (decision: ReviewDecision) => api.reviewDecision(id!, decision),
+    onSuccess: invalidateTask,
+    onError,
   });
 
   const deleteMutation = useMutation({
@@ -64,7 +95,7 @@ export default function TaskCardPage() {
       qc.invalidateQueries({ queryKey: ['tasks'] });
       navigate('/author');
     },
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
   });
 
   const reportMutation = useMutation({
@@ -73,13 +104,7 @@ export default function TaskCardPage() {
       setReportText('');
       invalidateTask();
     },
-    onError: (err) => setActionError(errorMessage(err)),
-  });
-
-  const readyMutation = useMutation({
-    mutationFn: () => api.markReady(id!),
-    onSuccess: invalidateTask,
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
   });
 
   const attachTaskMutation = useMutation({
@@ -89,7 +114,7 @@ export default function TaskCardPage() {
       return api.addAttachment(id!, 'task', form);
     },
     onSuccess: invalidateTask,
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
   });
 
   const attachReportMutation = useMutation({
@@ -99,25 +124,19 @@ export default function TaskCardPage() {
       return api.addAttachment(id!, 'report', form);
     },
     onSuccess: invalidateTask,
-    onError: (err) => setActionError(errorMessage(err)),
+    onError,
   });
 
   if (isLoading) return <Spinner />;
   if (isError || !task) return <EmptyState text={STR.taskUnavailable} />;
 
-  const role =
-    task.author.id === me?.id ? 'author' : task.assignee.id === me?.id ? 'assignee' : 'observer';
-
-  const handleStatusSelect = (next: TaskStatus) => {
-    if (next === task.status) return;
-    setActionError('');
-    // Перевод в «Отменена» необратим по смыслу — спрашиваем подтверждение.
-    if (next === 'cancelled') {
-      setPendingStatus(next);
-    } else {
-      statusMutation.mutate(next);
-    }
-  };
+  const isAdmin = !!me?.isAdmin;
+  const isAuthor = task.author.id === me?.id;
+  const isAssignee = task.assignees.some((a) => a.id === me?.id);
+  const isObserver = task.observers.some((o) => o.id === me?.id);
+  const canManage = isAuthor || isAdmin; // правка/удаление/отмена/переоткрытие
+  const canReview = isObserver || isAdmin; // приёмка
+  const canSubmitReview = isAssignee && (task.status === 'in_progress' || task.status === 'rework');
 
   const handleFilePick = (file: File | undefined, mutate: (file: File) => void) => {
     if (!file) return;
@@ -159,11 +178,19 @@ export default function TaskCardPage() {
       </div>
 
       <div className="field">
-        <label>{STR.fAssignee}</label>
-        <div className="field-value">
-          {task.assignee.displayName}
-          {task.assignee.isDeleted ? ' (удалён)' : ''}
-        </div>
+        <label>{STR.fAssignees}</label>
+        {task.assignees.length === 0 ? (
+          <div className="field-value">—</div>
+        ) : (
+          <div className="chip-list">
+            {task.assignees.map((a) => (
+              <span className="chip" key={a.id}>
+                {a.displayName}
+                {a.isDeleted ? ' (удалён)' : ''}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="field">
@@ -223,7 +250,58 @@ export default function TaskCardPage() {
 
       {actionError && <div className="form-error">{actionError}</div>}
 
-      {role === 'author' && (
+      {/* Действия по статусу — зависят от роли и текущего статуса. */}
+      <section className="task-action-section">
+        <div className="task-action-header">
+          {canSubmitReview && (
+            <button
+              className="btn primary"
+              disabled={submitReviewMutation.isPending}
+              onClick={() => submitReviewMutation.mutate()}
+            >
+              {STR.submitReview}
+            </button>
+          )}
+          {canReview && task.status === 'under_review' && (
+            <>
+              <button
+                className="btn primary"
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate('accept')}
+              >
+                {STR.reviewAccept}
+              </button>
+              <button
+                className="btn"
+                disabled={reviewMutation.isPending}
+                onClick={() => reviewMutation.mutate('rework')}
+              >
+                {STR.reviewRework}
+              </button>
+            </>
+          )}
+          {canManage && !isClosed(task.status) && (
+            <button
+              className="btn danger"
+              disabled={statusMutation.isPending}
+              onClick={() => setConfirmCancel(true)}
+            >
+              {STR.cancelTask}
+            </button>
+          )}
+          {canManage && isClosed(task.status) && (
+            <button
+              className="btn"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate('in_progress')}
+            >
+              {STR.reopen}
+            </button>
+          )}
+        </div>
+      </section>
+
+      {canManage && (
         <section className="task-action-section">
           <div className="task-action-header">
             <button className="btn" onClick={() => setEditing((v) => !v)}>
@@ -241,7 +319,7 @@ export default function TaskCardPage() {
                 description: task.description,
                 dueAt: task.deadline,
                 dueMode: task.deadlineHasTime ? 'datetime' : 'date',
-                assigneeId: task.assignee.id,
+                assigneeIds: task.assignees.map((a) => a.id),
                 observerIds: task.observers.map((o) => o.id),
               }}
               submitLabel={STR.save}
@@ -251,22 +329,6 @@ export default function TaskCardPage() {
               surface="plain"
             />
           )}
-
-          <div className="field">
-            <label htmlFor="task-status">{STR.fStatus}</label>
-            <select
-              id="task-status"
-              value={task.status}
-              disabled={statusMutation.isPending}
-              onChange={(e) => handleStatusSelect(e.target.value as TaskStatus)}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s] ?? s}
-                </option>
-              ))}
-            </select>
-          </div>
 
           <div className="field">
             <label htmlFor="task-attachment">Прикрепить файл</label>
@@ -284,7 +346,7 @@ export default function TaskCardPage() {
         </section>
       )}
 
-      {role === 'assignee' && (
+      {isAssignee && (
         <section className="task-action-section">
           <div className="field">
             <label htmlFor="task-report-text">{STR.fReport}</label>
@@ -301,13 +363,6 @@ export default function TaskCardPage() {
               onClick={() => reportMutation.mutate(reportText)}
             >
               {STR.addReport}
-            </button>
-            <button
-              className="btn primary"
-              disabled={readyMutation.isPending}
-              onClick={() => readyMutation.mutate()}
-            >
-              {STR.markReady}
             </button>
           </div>
           <div className="field">
@@ -326,6 +381,8 @@ export default function TaskCardPage() {
         </section>
       )}
 
+      <TaskChat taskId={task.id} />
+
       {confirmDelete && (
         <ConfirmDialog
           message="Удалить задачу?"
@@ -339,17 +396,16 @@ export default function TaskCardPage() {
         />
       )}
 
-      {pendingStatus && (
+      {confirmCancel && (
         <ConfirmDialog
           message="Перевести задачу в статус «Отменена»?"
           confirmLabel={STR.confirm}
           danger
           onConfirm={() => {
-            const next = pendingStatus;
-            setPendingStatus(null);
-            statusMutation.mutate(next);
+            setConfirmCancel(false);
+            statusMutation.mutate('cancelled');
           }}
-          onCancel={() => setPendingStatus(null)}
+          onCancel={() => setConfirmCancel(false)}
         />
       )}
     </div>

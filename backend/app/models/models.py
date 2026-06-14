@@ -72,6 +72,8 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Ключ файла-аватара в сторадже вложений (UUID-имя); NULL = аватар не загружен.
+    avatar_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created_at()
@@ -148,9 +150,6 @@ class Task(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    assignee_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
-    )
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
@@ -159,7 +158,9 @@ class Task(Base):
     updated_at: Mapped[datetime] = _updated_at()
 
     author: Mapped[User] = relationship("User", foreign_keys=[author_id], lazy="joined")
-    assignee: Mapped[User] = relationship("User", foreign_keys=[assignee_id], lazy="joined")
+    assignees: Mapped[list[TaskAssignee]] = relationship(
+        "TaskAssignee", cascade="all, delete-orphan", lazy="selectin"
+    )
     observers: Mapped[list[TaskObserver]] = relationship(
         "TaskObserver", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -173,6 +174,25 @@ class Task(Base):
     @property
     def observer_ids(self) -> list[uuid.UUID]:
         return [o.user_id for o in self.observers]
+
+    @property
+    def assignee_ids(self) -> list[uuid.UUID]:
+        return [a.user_id for a in self.assignees]
+
+
+class TaskAssignee(Base):
+    """Исполнители задачи (M:N, ≥1 на уровне приложения) (§2, design.md)."""
+
+    __tablename__ = "task_assignees"
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), primary_key=True
+    )
+
+    user: Mapped[User] = relationship("User", lazy="joined")
 
 
 class TaskObserver(Base):
@@ -269,6 +289,64 @@ class ReportAttachment(Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    created_at: Mapped[datetime] = _created_at()
+
+
+class TaskMessage(Base):
+    """Сообщение чата задачи (§4, design.md «task_messages»).
+
+    `author_id` RESTRICT: имя автора показываем по актуальному `display_name`
+    (для tombstone-пользователя — «Пользователь удалён» на уровне отображения),
+    поэтому снапшот имени не храним. Длина тела ограничивается приложением
+    (`settings.max_message_len`).
+    """
+
+    __tablename__ = "task_messages"
+    __table_args__ = (Index("ix_task_messages_task", "task_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+    author: Mapped[User] = relationship("User", lazy="joined")
+
+
+class Notification(Base):
+    """On-site уведомление пользователю (§6, design.md «notifications»).
+
+    `kind` — 'chat_message' | 'task_rework'. `task_id`/`message_id` опциональны
+    (CASCADE при удалении ссылки). E-mail по этим событиям не отправляется.
+    """
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index(
+            "ix_notifications_user_unread",
+            "user_id",
+            "is_read",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True
+    )
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("task_messages.id", ondelete="CASCADE"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = _created_at()
 
 

@@ -109,7 +109,9 @@ export default function TasksTable({ items, role, sort, onToggle, onRowClick }: 
                 </div>
               </td>
               <td data-label={personLabel}>
-                {showAuthorColumn ? item.author.displayName : item.assignee.displayName}
+                {showAuthorColumn
+                  ? item.author.displayName
+                  : item.assignees.map((a) => a.displayName).join(', ')}
               </td>
               <td className="num" data-label="Срок">
                 {formatDeadline(item.deadline, item.deadlineHasTime)}

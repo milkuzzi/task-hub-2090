@@ -39,3 +39,25 @@ class FakeChannel:
 
     def recipients(self) -> list[str]:
         return [s["to"] for s in self.sent]
+
+
+class FakeSocket:
+    """Минимальный фейк WebSocket для тестов ConnectionManager/доставки чата.
+
+    Реализует только `send_json`; накапливает полученные payload-ы. Опционально
+    имитирует обрыв соединения (исключение при отправке), чтобы проверить, что
+    рассылка остальным не срывается.
+    """
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.received: list[dict] = []
+        self._fail = fail
+
+    async def send_json(self, data: dict) -> None:
+        if self._fail:
+            raise RuntimeError("socket closed")
+        self.received.append(data)
+
+    def types(self) -> list[str]:
+        return [m.get("type") for m in self.received]
+

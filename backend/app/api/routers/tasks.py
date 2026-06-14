@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, TaskContext, get_current_user, get_task_context
@@ -17,6 +19,7 @@ from app.api.presenters import attachment_out, task_detail, task_list_item
 from app.core import errors
 from app.db.session import get_db
 from app.domain.enums import AttachKind, TaskStatus
+from app.schemas.chat import MessageIn, MessageListOut, MessageOut
 from app.schemas.common import (
     AttachmentOut,
     OkResponse,
@@ -24,9 +27,10 @@ from app.schemas.common import (
     TaskListResponse,
 )
 from app.schemas.reports import MarkReadyIn, MarkReadyOut, ReportIn
-from app.schemas.tasks import StatusIn, TaskCreateIn, TaskUpdateIn
+from app.schemas.tasks import ReviewDecisionIn, StatusIn, TaskCreateIn, TaskUpdateIn
 from app.services import (
     attachment_service,
+    chat_service,
     export_service,
     notification_service,
     report_service,
@@ -46,17 +50,46 @@ def _parse_status(value: str | None) -> TaskStatus | None:
         raise errors.bad_request("Неизвестный статус.") from None
 
 
+def _parse_task_payload(payload: str) -> TaskCreateIn:
+    """Парсит JSON-строку `payload` мультипарта в TaskCreateIn.
+
+    Сначала валидируем форму через ту же схему, что и раньше (чёткие ошибки по
+    полям в том же формате 422 `details`, что и при обычном JSON-теле).
+    """
+    try:
+        return TaskCreateIn.model_validate_json(payload)
+    except ValidationError as exc:
+        details = [
+            {
+                "field": ".".join(str(p) for p in e.get("loc", ()) if p != "body"),
+                "message": e.get("msg", ""),
+            }
+            for e in exc.errors()
+        ]
+        raise errors.validation_error(details) from exc
+
+
 # --- Список / создание ---
 
 
 @router.post("", response_model=TaskDetailOut, status_code=201)
 async def create_task(
-    body: TaskCreateIn,
     background: BackgroundTasks,
+    payload: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    task = await task_service.create_task(db, user, body)
+    """Создание задачи с вложениями (§6).
+
+    Контракт `multipart/form-data`:
+      - `payload` — JSON-строка с телом задачи (та же форма, что TaskCreateIn:
+        title, description, dueAt, dueMode, assigneeIds, observerIds, links);
+      - `files` — ноль или более файлов-вложений.
+    Задача и все вложения создаются атомарно (см. task_service.create_task).
+    """
+    body = _parse_task_payload(payload)
+    task = await task_service.create_task(db, user, body, files=files)
     # Уведомление о постановке (§9, событие 1) — сразу, но фоном: не блокируем
     # ответ ожиданием SMTP. Идемпотентность общая с суточным прогоном.
     background.add_task(notification_service.notify_assignment, task.id)
@@ -155,6 +188,51 @@ async def change_status(
 ):
     task = await task_service.change_status(db, ctx, body.status)
     return task_detail(task)
+
+
+@router.post("/{task_id}/submit-review", response_model=TaskDetailOut)
+async def submit_review(
+    ctx: TaskContext = Depends(get_task_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """Исполнитель: «Готово к проверке» → статус under_review."""
+    task = await task_service.submit_review(db, ctx)
+    return task_detail(task)
+
+
+@router.post("/{task_id}/review", response_model=TaskDetailOut)
+async def review_decision(
+    body: ReviewDecisionIn,
+    ctx: TaskContext = Depends(get_task_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """Приёмщик (наблюдатель/админ): принять (done) или вернуть на доработку (rework)."""
+    task = await task_service.review_decision(db, ctx, body.decision)
+    return task_detail(task)
+
+
+# --- Чат задачи (§4) ---
+
+
+@router.get("/{task_id}/messages", response_model=MessageListOut)
+async def list_messages(
+    after: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    ctx: TaskContext = Depends(get_task_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """История сообщений чата. `after` — курсор по createdAt для дозагрузки."""
+    return await chat_service.list_messages(db, ctx, after=after, limit=limit)
+
+
+@router.post("/{task_id}/messages", response_model=MessageOut, status_code=201)
+async def post_message(
+    body: MessageIn,
+    ctx: TaskContext = Depends(get_task_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отправка сообщения в чат (право POST_MESSAGE). Доставка участникам по WS."""
+    return await chat_service.post_message(db, ctx, body.body)
 
 
 # --- Отчёт и готовность ---

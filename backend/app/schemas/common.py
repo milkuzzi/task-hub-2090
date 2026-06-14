@@ -58,7 +58,7 @@ class TaskListItemOut(CamelModel):
     status: TaskStatus
     is_overdue: bool
     needs_reassignment: bool
-    assignee: UserRefOut
+    assignees: list[UserRefOut] = []
     author: UserRefOut
     observers: list[UserRefOut] = []
     assignee_marked_ready: bool = False

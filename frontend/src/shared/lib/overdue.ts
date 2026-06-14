@@ -6,6 +6,6 @@ import type { TaskListItem } from '@/shared/types';
  */
 export function isVisuallyOverdue(item: Pick<TaskListItem, 'isOverdue' | 'status' | 'deadline'>): boolean {
   if (item.isOverdue) return true;
-  if (item.status !== 'in_progress') return false;
+  if (item.status === 'done' || item.status === 'cancelled') return false;
   return Date.now() >= new Date(item.deadline).getTime();
 }

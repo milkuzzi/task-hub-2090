@@ -18,6 +18,7 @@ from app.domain.enums import DueMode, NotifyEvent, TaskStatus
 from app.domain.notifications import templates
 from app.domain.notifications.schedule import due_event_for
 from app.domain.overdue import due_date_local, due_moment, is_overdue
+from app.domain.status import is_open
 from app.models import Task, User
 from app.notifications.channel import (
     CHANNEL_ORDER,
@@ -46,7 +47,10 @@ async def overdue_sweep(db: AsyncSession) -> int:
     res = await db.execute(
         select(Task)
         .options(noload("*"))
-        .where(Task.status == TaskStatus.IN_PROGRESS, Task.is_overdue.is_(False))
+        .where(
+            Task.status.notin_((TaskStatus.DONE, TaskStatus.CANCELLED)),
+            Task.is_overdue.is_(False),
+        )
     )
     moment_now = now()
     changed = 0
@@ -182,16 +186,18 @@ async def _emit(
 
 
 async def _emit_assigned(db: AsyncSession, task: Task) -> None:
-    """Событие №1 (постановка): исполнитель + наблюдатели, одноразово (идемпотентно)."""
-    await _emit(
-        db,
-        task,
-        NotifyEvent.ASSIGNED,
-        task.assignee,
-        _message_for(task, NotifyEvent.ASSIGNED, is_observer=False),
-        due_version=None,
-        run_date=None,
-    )
+    """Событие №1 (постановка): исполнители + наблюдатели, одноразово (идемпотентно)."""
+    for ta in task.assignees:
+        if ta.user is not None:
+            await _emit(
+                db,
+                task,
+                NotifyEvent.ASSIGNED,
+                ta.user,
+                _message_for(task, NotifyEvent.ASSIGNED, is_observer=False),
+                due_version=None,
+                run_date=None,
+            )
     for obs in task.observers:
         if obs.user is not None:
             await _emit(
@@ -234,18 +240,20 @@ async def daily_run(db: AsyncSession, run_date: date | None = None) -> None:
         # СОБЫТИЕ 1 — постановка (исполнитель + наблюдатели), одноразово
         await _emit_assigned(db, task)
 
-        # СОБЫТИЯ 2–4 — только для открытых задач, только исполнителю
-        if task.status != TaskStatus.IN_PROGRESS:
+        # СОБЫТИЯ 2–4 — только для открытых задач, всем исполнителям
+        if not is_open(task.status):
             continue
         dl = due_date_local(task.due_at)
         event = due_event_for(run_date, dl)
         if event is not None:
-            await _emit(
-                db,
-                task,
-                event,
-                task.assignee,
-                _message_for(task, event, is_observer=False),
-                due_version=task.due_version,
-                run_date=run_date,
-            )
+            for ta in task.assignees:
+                if ta.user is not None:
+                    await _emit(
+                        db,
+                        task,
+                        event,
+                        ta.user,
+                        _message_for(task, event, is_observer=False),
+                        due_version=task.due_version,
+                        run_date=run_date,
+                    )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
@@ -49,22 +50,34 @@ def auth_header(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def create_task_form(payload: dict) -> dict[str, str]:
+    """Поля multipart-формы для `POST /tasks`: тело задачи JSON-строкой в `payload`.
+
+    Контракт §6: `payload` (JSON) + ноль или более `files`.
+    """
+    return {"payload": json.dumps(payload)}
+
+
 async def make_task(
     db: AsyncSession,
     author: User,
     assignee: User,
     observers: Sequence[User] = (),
     *,
+    assignees: Sequence[User] | None = None,
     title: str = "Задача",
     due_at: datetime | None = None,
     due_mode: DueMode = DueMode.DATETIME,
     links: list[str] | None = None,
 ) -> Task:
+    # Совместимость: позиционный `assignee` — основной исполнитель; через
+    # `assignees` можно задать несколько (тогда `assignee` игнорируется).
+    assignee_users = list(assignees) if assignees is not None else [assignee]
     data = TaskCreateIn(
         title=title,
         due_at=due_at or (now() + timedelta(days=2)),
         due_mode=due_mode,
-        assignee_id=assignee.id,
+        assignee_ids=[u.id for u in assignee_users],
         observer_ids=[o.id for o in observers],
         links=links or [],
     )

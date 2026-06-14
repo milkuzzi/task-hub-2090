@@ -37,7 +37,10 @@ function compareByField(a: TaskListItem, b: TaskListItem, field: SortField): num
     case 'status':
       return (STATUS_LABEL[a.status] ?? a.status).localeCompare(STATUS_LABEL[b.status] ?? b.status, 'ru');
     case 'assignee':
-      return a.assignee.displayName.localeCompare(b.assignee.displayName, 'ru');
+      return a.assignees
+        .map((x) => x.displayName)
+        .join(', ')
+        .localeCompare(b.assignees.map((x) => x.displayName).join(', '), 'ru');
     case 'author':
       return a.author.displayName.localeCompare(b.author.displayName, 'ru');
     default:
@@ -50,8 +53,8 @@ export function sortItems(items: TaskListItem[], sort: SortState): TaskListItem[
 
   if (sort.field === null) {
     copy.sort((a, b) => {
-      const aOpen = a.status === 'in_progress' ? 0 : 1;
-      const bOpen = b.status === 'in_progress' ? 0 : 1;
+      const aOpen = a.status === 'done' || a.status === 'cancelled' ? 1 : 0;
+      const bOpen = b.status === 'done' || b.status === 'cancelled' ? 1 : 0;
       if (aOpen !== bOpen) {
         return aOpen - bOpen;
       }

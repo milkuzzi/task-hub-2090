@@ -9,6 +9,7 @@ import TasksTabPage from '@/features/tasks/TasksTabPage';
 import TaskCreatePage from '@/features/tasks/TaskCreatePage';
 import TaskCardPage from '@/features/tasks/TaskCardPage';
 import RegistryPage from '@/features/admin/RegistryPage';
+import ProfilePage from '@/features/profile/ProfilePage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: 'observer', element: <TasksTabPage role="observer" /> },
       { path: 'tasks/new', element: <TaskCreatePage /> },
       { path: 'tasks/:id', element: <TaskCardPage /> },
+      { path: 'profile', element: <ProfilePage /> },
       {
         path: 'admin',
         element: <AdminGuard />,

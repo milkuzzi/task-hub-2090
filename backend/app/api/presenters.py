@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from app.api.routes import attachment_download_path
 from app.core.clock import now
-from app.domain.enums import AttachKind, DueMode, TaskStatus
+from app.domain.enums import AttachKind, DueMode
 from app.domain.overdue import is_overdue
+from app.domain.status import is_open
 from app.models import ReportAttachment, Task, TaskAttachment, TaskObserver, User
 from app.schemas.common import AttachmentOut, ReportOut, TaskDetailOut, TaskListItemOut, UserRefOut
 
@@ -51,7 +52,7 @@ def attachment_out(att: TaskAttachment | ReportAttachment, *, task_id) -> Attach
 def _effective_overdue(task: Task) -> bool:
     if task.is_overdue:
         return True
-    if task.status == TaskStatus.IN_PROGRESS:
+    if is_open(task.status):
         return is_overdue(now(), task.due_at, task.due_mode)
     return False
 
@@ -67,7 +68,7 @@ def task_list_item(task: Task) -> TaskListItemOut:
         status=task.status,
         is_overdue=_effective_overdue(task),
         needs_reassignment=task.needs_reassignment,
-        assignee=user_ref(task.assignee),
+        assignees=[user_ref(a.user) for a in task.assignees],
         author=user_ref(task.author),
         observers=[observer_ref(o) for o in task.observers],
         assignee_marked_ready=bool(task.report and task.report.ready_flag),

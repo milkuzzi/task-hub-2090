@@ -837,3 +837,151 @@ button.attach-link {
     --ring: 0 0 0 3px rgba(59, 130, 246, 0.35);
   }
 }
+
+/* --- BLOCK 2: чат, уведомления, аватар --- */
+
+.content-topbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--s1);
+}
+
+.avatar {
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--ink, #1f2937);
+  font-weight: 600;
+  overflow: hidden;
+}
+.avatar-img {
+  object-fit: cover;
+}
+
+/* Чат задачи */
+.task-chat {
+  margin-top: var(--s2, 16px);
+  border-top: 1px solid var(--line, #e5e7eb);
+  padding-top: var(--s2, 16px);
+}
+.chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.chat-body {
+  flex: 1;
+  min-width: 0;
+}
+.chat-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.chat-author {
+  font-weight: 600;
+}
+.chat-time {
+  color: var(--muted, #6b7280);
+}
+.chat-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.chat-input textarea {
+  flex: 1;
+  min-height: 40px;
+  resize: vertical;
+}
+
+/* Колокольчик уведомлений */
+.bell {
+  position: relative;
+}
+.bell-button {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px;
+}
+.bell-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.bell-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 50;
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.bell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+}
+.bell-empty {
+  padding: 16px 12px;
+}
+.bell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bell-row + .bell-row {
+  border-top: 1px solid var(--line, #f1f5f9);
+}
+.bell-row.read {
+  opacity: 0.6;
+}
+.bell-row-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.bell-row-button:hover {
+  background: var(--hover, #f8fafc);
+}

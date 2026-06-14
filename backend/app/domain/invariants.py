@@ -11,7 +11,12 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from app.core.config import settings
-from app.core.errors import assignee_as_observer, self_as_observer, validation_error
+from app.core.errors import (
+    assignee_as_observer,
+    no_assignees,
+    self_as_observer,
+    validation_error,
+)
 
 
 def validate_title(title: str) -> str:
@@ -24,10 +29,10 @@ def validate_title(title: str) -> str:
 def validate_observers(
     observer_ids: Sequence[UUID],
     *,
-    assignee_id: UUID,
+    assignee_ids: Sequence[UUID],
     author_id: UUID,
 ) -> list[UUID]:
-    """≤5 наблюдателей, без дублей, наблюдатель ≠ исполнитель/постановщик."""
+    """≤MAX наблюдателей, без дублей, наблюдатель ≠ исполнитель/постановщик."""
     deduped = list(dict.fromkeys(observer_ids))  # сохраняем порядок, убираем дубли
     if len(deduped) > settings.max_observers:
         raise validation_error(
@@ -37,15 +42,15 @@ def validate_observers(
     # error.message): «себя нельзя в наблюдатели», «исполнитель ≠ наблюдатель».
     if author_id in deduped:
         raise self_as_observer()
-    if assignee_id in deduped:
+    assignee_set = set(assignee_ids)
+    if any(oid in assignee_set for oid in deduped):
         raise assignee_as_observer()
     return deduped
 
 
-def validate_assignee(assignee_id: UUID | None) -> UUID:
-    """Ровно один исполнитель — обязателен."""
-    if assignee_id is None:
-        raise validation_error(
-            [{"field": "assignee_id", "message": "Исполнитель обязателен (ровно один)."}]
-        )
-    return assignee_id
+def validate_assignees(assignee_ids: Sequence[UUID]) -> list[UUID]:
+    """Хотя бы один исполнитель; дубли убираются, порядок сохраняется."""
+    deduped = list(dict.fromkeys(assignee_ids or []))
+    if not deduped:
+        raise no_assignees()
+    return deduped

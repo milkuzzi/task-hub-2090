@@ -71,6 +71,10 @@ def assignee_as_observer() -> AppError:
     return AppError(400, "ASSIGNEE_AS_OBSERVER", "Исполнитель не может быть наблюдателем.")
 
 
+def no_assignees() -> AppError:
+    return AppError(422, "NO_ASSIGNEES", "Нужен хотя бы один исполнитель.")
+
+
 def not_sole_admin() -> AppError:
     return AppError(
         409,
@@ -140,6 +144,22 @@ def task_total_size_limit() -> AppError:
 
 def unsupported_filename() -> AppError:
     return AppError(415, "UNSUPPORTED_FILENAME", "Недопустимое имя файла.")
+
+
+def unsupported_media_type(
+    message: str = "Недопустимый тип файла. Разрешены изображения PNG, JPEG, WebP.",
+) -> AppError:
+    return AppError(415, "UNSUPPORTED_MEDIA_TYPE", message)
+
+
+def avatar_too_large(max_mb: int) -> AppError:
+    return AppError(
+        413, "AVATAR_TOO_LARGE", f"Изображение превышает допустимый размер ({max_mb} МБ)."
+    )
+
+
+def avatar_not_found() -> AppError:
+    return AppError(404, "AVATAR_NOT_FOUND", "Аватар не найден.")
 
 
 def rate_limited() -> AppError:
