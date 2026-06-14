@@ -85,13 +85,20 @@ class EmailChannel:
                     subtype=subtype or "octet-stream",
                     filename=att.filename,
                 )
+            # Порт 465 — implicit TLS (SMTPS); 587/2525 — STARTTLS. SMTP_TLS=true
+            # включает шифрование соответствующим способом, иначе — открытое
+            # соединение. Раньше use_tls=true на 587 ломал хендшейк
+            # (SSL: WRONG_VERSION_NUMBER), из-за чего письма не отправлялись.
+            implicit_tls = settings.smtp_tls and settings.smtp_port == 465
+            start_tls = settings.smtp_tls and settings.smtp_port != 465
             await aiosmtplib.send(
                 msg,
                 hostname=settings.smtp_host,
                 port=settings.smtp_port,
                 username=settings.smtp_user or None,
                 password=settings.smtp_password or None,
-                use_tls=settings.smtp_tls,
+                use_tls=implicit_tls,
+                start_tls=start_tls,
                 timeout=20,
             )
             return DeliveryResult(self.kind, DeliveryStatus.DELIVERED)
